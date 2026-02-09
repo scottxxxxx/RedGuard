@@ -52,6 +52,11 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
         } else {
             setLocalPayload("");
         }
+
+        // Auto-switch to results tab when a new result arrives
+        if (result && !result.error && activeTab !== 'output' && activeTab !== 'full') {
+            setActiveTab('output');
+        }
     }, [result, previewPayload]);
 
     const handleParamChange = (key: keyof Hyperparams, value: number) => {

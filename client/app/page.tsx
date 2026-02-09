@@ -128,11 +128,23 @@ export default function Home() {
         fetchPreview();
     }, [interaction, fullGuardrailConfig, messages, llmConfig?.customPrompt]);
 
-    // Clear stale evaluation results when config or interaction changes
+    // Clear stale evaluation results only when the base interaction content changes
+    // We remove fullGuardrailConfig from dependencies so results stay visible 
+    // even if settings are tweaked, until a new evaluation is run.
+    const lastEvalInterRef = useRef<{ user: string, bot: string } | null>(null);
     useEffect(() => {
-        setEvalResult(null);
-        setEvalRawResponse(null);
-    }, [fullGuardrailConfig, interaction]);
+        const hasInteractionChanged =
+            interaction?.user !== lastEvalInterRef.current?.user ||
+            interaction?.bot !== lastEvalInterRef.current?.bot;
+
+        // Only clear if the interaction text changed and we aren't just starting/resetting
+        if (hasInteractionChanged && interaction) {
+            setEvalResult(null);
+            setEvalRawResponse(null);
+        }
+
+        lastEvalInterRef.current = interaction ? { user: interaction.user, bot: interaction.bot } : null;
+    }, [interaction?.user, interaction?.bot]);
 
     const handleEvaluate = async () => {
         if (!interaction || !fullGuardrailConfig) return;
