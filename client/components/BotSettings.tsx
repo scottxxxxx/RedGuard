@@ -38,7 +38,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
     const initializeChat = async (currentConfig: BotConfig) => {
         try {
             const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
-            const res = await fetch(apiUrl, {
+            await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -47,10 +47,8 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 })
             });
 
-            const data = await res.json();
-            if (res.ok && data.data?.[0]?.val && onConnect) {
-                onConnect(data.data[0].val);
-            }
+            // Greet message will be handled by handleBotConnect in the parent via polling or socket if implemented
+            // For now, it's just triggered here.
         } catch (err) {
             console.warn("Failed to get initial bot greeting:", err);
         }
@@ -222,12 +220,17 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
 
             <div className="mt-5 pt-4 border-t border-[var(--border)]">
                 <button
-                    onClick={() => {
-                        if (onSessionReset) onSessionReset();
-                        validateConnection(config);
+                    onClick={async () => {
+                        setIsValidating(true);
+                        try {
+                            if (onSessionReset) onSessionReset();
+                            await validateConnection(config);
+                        } finally {
+                            setIsValidating(false);
+                        }
                     }}
                     disabled={isValidating}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-lg transition-all hover:shadow-sm"
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-lg transition-all hover:shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
                 >
                     {isValidating ? (
                         <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
