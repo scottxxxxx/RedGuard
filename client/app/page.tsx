@@ -255,7 +255,7 @@ export default function Home() {
                                     className="h-16 w-auto object-contain"
                                 />
                                 <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.4</span>
+                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.5</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="text-sm text-[var(--foreground-muted)] hidden md:block">
@@ -316,7 +316,7 @@ export default function Home() {
                                     </span>
                                 </h1>
                                 <p className="text-lg text-[var(--foreground-muted)] max-w-2xl mx-auto leading-relaxed">
-                                    Chat with your bot in a live session while an AI judge evaluates every response against your configured guardrail policies — catching what passed, what failed, and what's missing.
+                                    Chat with your bot in a live session while an AI judge evaluates every response against your configured guardrail policies, catching what passed, what failed, and what's missing.
                                 </p>
                             </header>
 
