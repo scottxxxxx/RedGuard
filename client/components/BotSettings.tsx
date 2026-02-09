@@ -13,9 +13,10 @@ export type BotConfig = {
 
 interface Props {
     onConfigChange: (config: BotConfig) => void;
+    onBotNameUpdate?: (name: string | null) => void;
 }
 
-export default function BotSettings({ onConfigChange }: Props) {
+export default function BotSettings({ onConfigChange, onBotNameUpdate }: Props) {
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
         clientId: '***REMOVED_KORE_CLIENT_ID***',
@@ -27,18 +28,62 @@ export default function BotSettings({ onConfigChange }: Props) {
         inspectorClientSecret: ''
     });
 
+    const [isValidating, setIsValidating] = useState(false);
+    const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'error'>('idle');
+    const [validationMessage, setValidationMessage] = useState<string | null>(null);
+
+    const validateConnection = async (currentConfig: BotConfig) => {
+        if (!currentConfig.botId || !currentConfig.clientId || !currentConfig.clientSecret) return;
+
+        setIsValidating(true);
+        setValidationStatus('idle');
+        setValidationMessage(null);
+
+        try {
+            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/validate`;
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botConfig: currentConfig })
+            });
+
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || 'Validation failed');
+
+            setValidationStatus('success');
+            if (data.name) {
+                setValidationMessage(`Connected as "${data.name}"`);
+                if (onBotNameUpdate) onBotNameUpdate(data.name);
+            } else {
+                setValidationMessage(data.message || 'Connected (Bot name restricted)');
+                if (onBotNameUpdate) onBotNameUpdate(null);
+            }
+        } catch (err: any) {
+            setValidationStatus('error');
+            setValidationMessage(err.message);
+            if (onBotNameUpdate) onBotNameUpdate(null);
+        } finally {
+            setIsValidating(false);
+        }
+    };
+
     // Load from localStorage on mount
     useEffect(() => {
         const savedConfig = localStorage.getItem('redguard_bot_config');
         if (savedConfig) {
             try {
                 const parsed = JSON.parse(savedConfig);
-                setConfig(prev => ({ ...prev, ...parsed }));
+                const merged = { ...config, ...parsed };
+                setConfig(merged);
+                // Try to validate on load if we have full config
+                if (merged.botId && merged.clientId && merged.clientSecret) {
+                    validateConnection(merged);
+                }
             } catch (e) {
                 console.error("Failed to parse saved bot config", e);
             }
         }
-    }, []);
+    }, [onBotNameUpdate]);
 
     // Save to localStorage when config changes
     useEffect(() => {
@@ -59,10 +104,43 @@ export default function BotSettings({ onConfigChange }: Props) {
                         <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
                     </svg>
                 </div>
-                <h3 className="text-base font-semibold text-[var(--foreground)]">
-                    Bot Configuration
-                </h3>
+                <div className="flex-1">
+                    <h3 className="text-base font-semibold text-[var(--foreground)]">
+                        Bot Configuration
+                    </h3>
+                </div>
+                <button
+                    onClick={() => validateConnection(config)}
+                    disabled={isValidating || !config.botId || !config.clientId || !config.clientSecret}
+                    className="flex items-center gap-1.5 px-2.5 py-1 text-[10px] font-bold uppercase tracking-wider bg-indigo-50 dark:bg-indigo-900/20 text-indigo-600 dark:text-indigo-400 rounded border border-indigo-200 dark:border-indigo-800 hover:bg-indigo-100 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                    {isValidating ? (
+                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    ) : (
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                        </svg>
+                    )}
+                    Test Connection
+                </button>
             </div>
+
+            {validationMessage && (
+                <div className={`mb-4 p-2 rounded text-[11px] flex items-start gap-2 ${validationStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+                    }`}>
+                    <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        {validationStatus === 'success' ? (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        ) : (
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                        )}
+                    </svg>
+                    {validationMessage}
+                </div>
+            )}
 
             <div className="space-y-3">
                 <h4 className="text-[10px] font-bold uppercase text-[var(--foreground-muted)] tracking-wider mt-4">Web SDK (Chat) Credentials</h4>

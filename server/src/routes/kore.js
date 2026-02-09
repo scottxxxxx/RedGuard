@@ -72,4 +72,22 @@ router.post('/llm-logs', async (req, res) => {
     }
 });
 
+router.post('/validate', async (req, res) => {
+    try {
+        const { botConfig } = req.body;
+
+        if (!botConfig) {
+            return res.status(400).json({ error: "No configuration provided." });
+        }
+
+        const info = await koreApiService.getBotInfo(botConfig);
+        res.json(info);
+    } catch (error) {
+        console.error("Kore Validation Error:", error.message);
+        res.status(401).json({
+            error: error.message
+        });
+    }
+});
+
 module.exports = router;
