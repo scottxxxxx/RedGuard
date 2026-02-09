@@ -360,6 +360,7 @@ export default function Home() {
                                                     onConfigChange={setBotConfig}
                                                     onBotNameUpdate={setBotName}
                                                     onConnect={handleBotConnect}
+                                                    onSessionReset={handleSessionReset}
                                                     userId={userId}
                                                 />
                                             </div>
