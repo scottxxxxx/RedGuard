@@ -14,9 +14,10 @@ export type BotConfig = {
 interface Props {
     onConfigChange: (config: BotConfig) => void;
     onBotNameUpdate?: (name: string | null) => void;
+    onConnect?: (botGreeting: string) => void;
 }
 
-export default function BotSettings({ onConfigChange, onBotNameUpdate }: Props) {
+export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect }: Props) {
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
         clientId: '***REMOVED_KORE_CLIENT_ID***',
@@ -31,6 +32,27 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate }: Props) 
     const [isValidating, setIsValidating] = useState(false);
     const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [validationMessage, setValidationMessage] = useState<string | null>(null);
+
+    const initializeChat = async (currentConfig: BotConfig) => {
+        try {
+            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
+            const res = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    botConfig: currentConfig,
+                    userId: `RedGuard-init-${Math.random().toString(36).substring(7)}`
+                })
+            });
+
+            const data = await res.json();
+            if (res.ok && data.data?.[0]?.val && onConnect) {
+                onConnect(data.data[0].val);
+            }
+        } catch (err) {
+            console.warn("Failed to get initial bot greeting:", err);
+        }
+    };
 
     const validateConnection = async (currentConfig: BotConfig) => {
         if (!currentConfig.botId || !currentConfig.clientId || !currentConfig.clientSecret) return;
@@ -58,6 +80,9 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate }: Props) 
                 setValidationMessage(data.message || 'Connected (Bot name restricted)');
                 if (onBotNameUpdate) onBotNameUpdate(null);
             }
+
+            // After validation, try to "connect" to get greeting if needed
+            initializeChat(currentConfig);
         } catch (err: any) {
             setValidationStatus('error');
             setValidationMessage(err.message);
@@ -124,7 +149,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate }: Props) 
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                         </svg>
                     )}
-                    Test Connection
+                    Connect & Test
                 </button>
             </div>
 

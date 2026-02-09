@@ -28,6 +28,7 @@ export default function Home() {
     const [guardrailPolicy, setGuardrailPolicy] = useState<GuardrailPolicy | null>(null);
     const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
     const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
+    const [botName, setBotName] = useState<string | null>(null);
 
     // Tab State for Evaluator View
     const [activeTab, setActiveTab] = useState<'live' | 'batch'>('live');
@@ -61,6 +62,17 @@ export default function Home() {
             llmInspectorRef.current?.refreshLogs();
         }, 5000);
     }, []);
+
+    const handleBotConnect = (greeting: string) => {
+        // If we already have messages, don't show greeting again
+        if (messages.length === 0) {
+            setMessages([{
+                role: 'bot',
+                text: greeting,
+                timestamp: new Date()
+            }]);
+        }
+    };
 
     // Merge policy and LLM config for the console
     const fullGuardrailConfig: CompositeGuardrailConfig | null = useMemo(() => {
@@ -259,8 +271,8 @@ export default function Home() {
                                 <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.7</span>
                             </div>
                             <div className="flex items-center gap-4">
-                                <div className="text-xs font-mono bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-md text-gray-500 hidden md:block">
-                                    {botConfig?.botId ? `Bot: ${botConfig.botId}` : 'Select a Bot to Begin'}
+                                <div className="text-xs font-mono bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800 px-3 py-1.5 rounded-md text-indigo-600 dark:text-indigo-400 font-bold hidden md:block">
+                                    {botName ? `Bot: ${botName}` : (botConfig?.botId ? `Bot: ${botConfig.botId}` : 'Select a Bot to Begin')}
                                 </div>
                                 <ThemeSwitcher />
                             </div>
@@ -344,7 +356,11 @@ export default function Home() {
                                         </div>
                                         <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                             <div className="col-span-4 h-full min-h-0">
-                                                <BotSettings onConfigChange={setBotConfig} />
+                                                <BotSettings
+                                                    onConfigChange={setBotConfig}
+                                                    onBotNameUpdate={setBotName}
+                                                    onConnect={handleBotConnect}
+                                                />
                                             </div>
                                             <div className="col-span-8 h-full min-h-0">
                                                 <ChatConsole
