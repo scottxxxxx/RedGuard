@@ -144,6 +144,8 @@ class GuardrailLogic {
         return {
             pass: overallPass,
             results,
+            result: r, // Include the full parsed LLM result for System Analysis tab
+            totalTokens: judgeResult.totalTokens,
             debug: {
                 prompt: judgeResult.prompt,
                 response: judgeResult.rawResponse,

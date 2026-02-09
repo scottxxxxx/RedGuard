@@ -12,6 +12,35 @@ class LLMJudge {
     };
 
     /**
+     * Helper to extract tokens from various provider response formats
+     */
+    _extractTokens(response, provider) {
+        if (!response) return null;
+
+        // Try structured data first
+        let tokens = null;
+        if (provider === 'openai') {
+            tokens = response.usage?.total_tokens;
+        } else if (provider === 'anthropic') {
+            tokens = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
+        } else if (provider === 'gemini') {
+            tokens = response.usageMetadata?.totalTokenCount;
+        }
+
+        // Fallback: If still null/undefined, try a generic search in the response
+        if (tokens === null || tokens === undefined) {
+            // Some providers might wrap usage
+            const usage = response.usage || response.usageMetadata || response.usage_metadata;
+            if (usage) {
+                tokens = usage.total_tokens || usage.totalTokenCount || usage.total_token_count ||
+                    (usage.input_tokens + usage.output_tokens);
+            }
+        }
+
+        return typeof tokens === 'number' ? tokens : null;
+    }
+
+    /**
      * @param {object} params
      * @param {string} params.userInput
      * @param {string} params.botResponse
@@ -303,7 +332,7 @@ ${systemPrompt}`;
                 isError: false,
                 provider,
                 model: actualModel,
-                totalTokens: result.totalTokens
+                totalTokens: result.totalTokens ?? null
             });
 
             return {
@@ -312,7 +341,8 @@ ${systemPrompt}`;
                 rawResponse: result.rawText,
                 fullApiResponse: result.fullResponse,
                 requestPayload: result.requestPayload,
-                hyperparams: params
+                hyperparams: params,
+                totalTokens: result.totalTokens
             };
 
         } catch (error) {
@@ -441,12 +471,15 @@ ${systemPrompt}`;
         });
 
         const rawText = response.data.choices[0].message.content;
+        const totalTokens = this._extractTokens(response.data, 'openai');
+
+
         return {
             parsed: JSON.parse(rawText),
             rawText: rawText,
             fullResponse: JSON.stringify(response.data, null, 2),
             requestPayload: JSON.stringify(requestPayload, null, 2),
-            totalTokens: response.data.usage?.total_tokens
+            totalTokens: totalTokens
         };
     }
 
@@ -463,12 +496,16 @@ ${systemPrompt}`;
 
         let rawText = response.data.content[0].text;
         let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+
+        const totalTokens = this._extractTokens(response.data, 'anthropic');
+
+
         return {
             parsed: JSON.parse(cleanedText),
             rawText: rawText,
             fullResponse: JSON.stringify(response.data, null, 2),
             requestPayload: JSON.stringify(requestPayload, null, 2),
-            totalTokens: (response.data.usage?.input_tokens || 0) + (response.data.usage?.output_tokens || 0)
+            totalTokens: totalTokens
         };
     }
 
@@ -480,12 +517,15 @@ ${systemPrompt}`;
 
         let rawText = response.data.candidates[0].content.parts[0].text;
         let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const totalTokens = this._extractTokens(response.data, 'gemini');
+
+
         return {
             parsed: JSON.parse(cleanedText),
             rawText: rawText,
             fullResponse: JSON.stringify(response.data, null, 2),
             requestPayload: JSON.stringify(requestPayload, null, 2),
-            totalTokens: response.data.usageMetadata?.totalTokenCount
+            totalTokens: totalTokens
         };
     }
 }

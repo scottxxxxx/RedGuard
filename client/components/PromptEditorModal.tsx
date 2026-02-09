@@ -1,5 +1,5 @@
-"use client";
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useNotification } from '../context/NotificationContext';
 
 interface Props {
     isOpen: boolean;
@@ -7,11 +7,15 @@ interface Props {
     value: string;
     onChange: (value: string) => void;
     onLoadTemplate: () => void;
+    onSaveToBackend?: (name: string, text: string) => Promise<boolean>;
 }
 
-export default function PromptEditorModal({ isOpen, onClose, value, onChange, onLoadTemplate }: Props) {
+export default function PromptEditorModal({ isOpen, onClose, value, onChange, onLoadTemplate, onSaveToBackend }: Props) {
     const textareaRef = useRef<HTMLTextAreaElement>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
+    const [isSavingToBackend, setIsSavingToBackend] = useState(false);
+    const [newBackendName, setNewBackendName] = useState("");
+    const { showToast } = useNotification();
 
     // Undo/Redo history
     const [history, setHistory] = useState<string[]>([value]);
@@ -72,6 +76,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                 const writable = await handle.createWritable();
                 await writable.write(value);
                 await writable.close();
+                showToast("Template saved to file", "success");
                 return;
             }
         } catch (err: any) {
@@ -95,6 +100,15 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
     const handleLoad = useCallback(() => {
         fileInputRef.current?.click();
     }, []);
+
+    const handleBackendSave = useCallback(async () => {
+        if (!onSaveToBackend) return;
+        const success = await onSaveToBackend(newBackendName, value);
+        if (success) {
+            setIsSavingToBackend(false);
+            setNewBackendName("");
+        }
+    }, [onSaveToBackend, newBackendName, value]);
 
     const handleFileChange = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
@@ -236,7 +250,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
 
                     <button
                         onClick={onLoadTemplate}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-[var(--primary-500)] text-white hover:bg-[var(--primary-600)] transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -244,12 +258,84 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                         Load Template
                     </button>
 
+                    {onSaveToBackend && (
+                        <button
+                            onClick={() => setIsSavingToBackend(true)}
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
+                            title="Save as a new template to the backend"
+                        >
+                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7H5a2 2 0 00-2 2v9a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-3m-1 4l-3 3m0 0l-3-3m3 3V4" />
+                            </svg>
+                            Save to Cloud
+                        </button>
+                    )}
+
                     <div className="flex-1" />
 
                     <span className="text-xs text-gray-400">
                         {value.length} chars
                     </span>
                 </div>
+
+                {/* Backend Save Overlay */}
+                {isSavingToBackend && (
+                    <div className="mx-4 mt-2 mb-0 bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 animate-in fade-in slide-in-from-top-2 duration-200 shadow-inner flex items-center justify-between gap-4">
+                        <div className="flex items-center gap-3 flex-1">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider whitespace-nowrap">
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
+                                </svg>
+                                New Name
+                            </div>
+                            <input
+                                type="text"
+                                value={newBackendName}
+                                onChange={e => setNewBackendName(e.target.value)}
+                                placeholder="Enter a name for this template..."
+                                className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 flex-1 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                autoFocus
+                                onKeyDown={e => {
+                                    if (e.key === 'Enter') handleBackendSave();
+                                    if (e.key === 'Escape') setIsSavingToBackend(false);
+                                }}
+                            />
+                        </div>
+                        <div className="flex gap-2">
+                            <button
+                                onClick={handleBackendSave}
+                                className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 shadow-sm font-medium transition-colors"
+                            >
+                                Confirm Save
+                            </button>
+                            <button
+                                onClick={() => setIsSavingToBackend(false)}
+                                className="px-3 py-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm font-medium"
+                            >
+                                Cancel
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Persistent Validation Notice for Modal */}
+                {(() => {
+                    const required = ['{{conversation_transcript}}', '{{guardrail_configuration_table}}', '{{kore_genai_logs}}'];
+                    const missing = required.filter(r => !value.includes(r));
+                    if (missing.length > 0) {
+                        return (
+                            <div className="mx-4 mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex items-center gap-2 text-xs text-red-600 dark:text-red-400 animate-pulse">
+                                <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                </svg>
+                                <span>
+                                    <strong>Saving Disabled:</strong> Missing {missing.length} required variables: {missing.join(', ')}
+                                </span>
+                            </div>
+                        );
+                    }
+                    return null;
+                })()}
 
                 {/* Editor */}
                 <div className="flex-1 p-4 overflow-hidden">

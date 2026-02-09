@@ -31,7 +31,9 @@ router.post('/', async (req, res) => {
             topicsPass,
             injectionPass,
             regexPass,
-            overallPass
+            overallPass,
+            isAttack,
+            totalTokens
         } = req.body;
 
         const run = await prisma.evaluationRun.create({
@@ -44,7 +46,9 @@ router.post('/', async (req, res) => {
                 topicsPass,
                 injectionPass,
                 regexPass,
-                overallPass
+                overallPass,
+                isAttack: isAttack || false,
+                totalTokens
             }
         });
 

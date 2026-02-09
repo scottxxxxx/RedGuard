@@ -12,6 +12,7 @@ import RunHistory from "@/components/RunHistory";
 import LogViewer from "@/components/LogViewer";
 import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import { NotificationProvider } from "@/context/NotificationContext";
 
 // Composite type for ChatConsole
 export type CompositeGuardrailConfig = GuardrailPolicy & {
@@ -31,8 +32,8 @@ export default function Home() {
     const [activeTab, setActiveTab] = useState<'live' | 'batch'>('live');
 
     // Interaction State
-    const [interaction, setInteraction] = useState<{ user: string, bot: string } | null>(null);
-    const [messages, setMessages] = useState<{ role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date }[]>([]);
+    const [interaction, setInteraction] = useState<{ user: string, bot: string, result?: any } | null>(null);
+    const [messages, setMessages] = useState<{ role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean }[]>([]);
 
     // Evaluation State
     const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
@@ -41,7 +42,7 @@ export default function Home() {
     const [evalRawResponse, setEvalRawResponse] = useState<string | null>(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [runHistoryKey, setRunHistoryKey] = useState(0); // Force refresh of run history
-    const [hyperparams, setHyperparams] = useState({ temperature: 0.0, max_tokens: 1024, top_p: 1.0 });
+    const [hyperparams, setHyperparams] = useState({ temperature: 0.0, max_tokens: 4096, top_p: 1.0 });
     const [userId, setUserId] = useState('');
     const [koreSessionId, setKoreSessionId] = useState<string | null>(null);  // Kore's internal session ID
     const llmInspectorRef = useRef<LLMInspectorRef>(null);
@@ -155,6 +156,9 @@ export default function Home() {
             const result = await res.json();
 
             setEvalResult(result);
+            if (interaction) {
+                setInteraction({ ...interaction, result });
+            }
             if (result.debug) {
                 setEvalRawResponse(result.debug.response);
                 setPreviewPrompt(result.debug.prompt);
@@ -173,6 +177,8 @@ export default function Home() {
                 };
 
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+                const currentMsg = messages.findLast(m => m.role === 'user' && m.text === interaction.user);
+
                 await fetch(`${apiUrl}/runs`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
@@ -185,7 +191,9 @@ export default function Home() {
                         topicsPass: findResult('topics') ?? findResult('restrict'),
                         injectionPass: findResult('injection'),
                         regexPass: findResult('regex') ?? findResult('filter'),
-                        overallPass: result.pass ?? false
+                        overallPass: result.pass ?? false,
+                        isAttack: currentMsg?.isAttack || false,
+                        totalTokens: result.totalTokens ?? interaction.result?.totalTokens ?? null
                     })
                 });
                 // Trigger run history refresh
@@ -222,67 +230,68 @@ export default function Home() {
     };
 
     return (
-        <div className="h-screen bg-[var(--background)] flex flex-col">
-            {/* Top Navigation Bar */}
-            <nav className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-50">
-                <div className="w-full px-4 sm:px-6 lg:px-8">
-                    <div className="flex justify-between h-20 items-center">
-                        <div className="flex items-center gap-3">
-                            <img
-                                src="/logo.svg"
-                                alt="RedGuard Logo"
-                                className="h-16 w-auto object-contain"
-                            />
-                            <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                        </div>
-                        <div className="flex items-center gap-4">
-                            <div className="text-sm text-[var(--foreground-muted)] hidden md:block">
-                                Kore.AI Guardrail Testing
+        <NotificationProvider>
+            <div className="h-screen bg-[var(--background)] flex flex-col">
+                {/* Top Navigation Bar */}
+                <nav className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-50">
+                    <div className="w-full px-4 sm:px-6 lg:px-8">
+                        <div className="flex justify-between h-20 items-center">
+                            <div className="flex items-center gap-3">
+                                <img
+                                    src="/logo.svg"
+                                    alt="RedGuard Logo"
+                                    className="h-16 w-auto object-contain"
+                                />
+                                <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
                             </div>
-                            <ThemeSwitcher />
+                            <div className="flex items-center gap-4">
+                                <div className="text-sm text-[var(--foreground-muted)] hidden md:block">
+                                    Kore.AI Guardrail Testing
+                                </div>
+                                <ThemeSwitcher />
+                            </div>
                         </div>
                     </div>
-                </div>
-            </nav>
+                </nav>
 
-            {/* Sidebar + Main Content Layout */}
-            <div className="flex flex-1 overflow-hidden">
+                {/* Sidebar + Main Content Layout */}
+                <div className="flex flex-1 overflow-hidden">
 
-                {/* Sidebar */}
-                <aside className="w-64 bg-surface border-r border-border flex flex-col flex-shrink-0">
-                    <div className="p-4 space-y-1">
-                        <button
-                            onClick={() => setCurrentView('evaluator')}
-                            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'evaluator'
-                                ? 'bg-sidebar-active text-sidebar-active-text'
-                                : 'text-foreground hover:bg-sidebar-hover'
-                                }`}
-                        >
-                            <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                            Guardrail Evaluator
-                        </button>
+                    {/* Sidebar */}
+                    <aside className="w-64 bg-surface border-r border-border flex flex-col flex-shrink-0">
+                        <div className="p-4 space-y-1">
+                            <button
+                                onClick={() => setCurrentView('evaluator')}
+                                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'evaluator'
+                                    ? 'bg-sidebar-active text-sidebar-active-text'
+                                    : 'text-foreground hover:bg-sidebar-hover'
+                                    }`}
+                            >
+                                <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                </svg>
+                                Guardrail Evaluator
+                            </button>
 
-                        <button
-                            onClick={() => setCurrentView('logs')}
-                            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'logs'
-                                ? 'bg-sidebar-active text-sidebar-active-text'
-                                : 'text-foreground hover:bg-sidebar-hover'
-                                }`}
-                        >
-                            <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                            </svg>
-                            System Logs
-                        </button>
-                    </div>
-                </aside>
+                            <button
+                                onClick={() => setCurrentView('logs')}
+                                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'logs'
+                                    ? 'bg-sidebar-active text-sidebar-active-text'
+                                    : 'text-foreground hover:bg-sidebar-hover'
+                                    }`}
+                            >
+                                <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 01-2-2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                </svg>
+                                System Logs
+                            </button>
+                        </div>
+                    </aside>
 
-                {/* Main Content Area */}
-                <main className="flex-1 overflow-auto bg-[var(--background)] p-8">
-                    {currentView === 'evaluator' ? (
-                        <div className="w-full">
+                    {/* Main Content Area */}
+                    <main className="flex-1 overflow-auto bg-[var(--background)] p-8">
+                        {/* Evaluator View */}
+                        <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
                             <header className="mb-4">
                                 <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">Guardrail Evaluator</h1>
                                 <p className="text-sm text-[var(--foreground-muted)]">Configure, test, and verify bot guardrails in real-time</p>
@@ -312,10 +321,10 @@ export default function Home() {
                                 </nav>
                             </div>
 
-                            {activeTab === 'live' ? (
+                            {/* Live Tab Content */}
+                            <div className={activeTab === 'live' ? '' : 'hidden'}>
                                 <div className="space-y-6">
                                     {/* Row 1: Bot Config & Chat Console */}
-                                    {/* Explicit Height for density */}
                                     <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                         <div className="col-span-4 h-full min-h-0">
                                             <BotSettings onConfigChange={setBotConfig} />
@@ -337,7 +346,6 @@ export default function Home() {
                                     </div>
 
                                     {/* Row 2: Guardrail Config & Kore Logs */}
-                                    {/* Dense height for logs/config */}
                                     <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                         <div className="col-span-4 h-full min-h-0">
                                             <GuardrailSettings onConfigChange={setGuardrailPolicy} />
@@ -354,6 +362,7 @@ export default function Home() {
                                         </div>
                                         <div className="col-span-8">
                                             <EvaluationInspector
+                                                provider={llmConfig?.provider}
                                                 prompt={previewPrompt}
                                                 rawResponse={evalRawResponse}
                                                 result={evalResult}
@@ -392,17 +401,20 @@ export default function Home() {
                                     <div className="mt-8">
                                         <RunHistory key={runHistoryKey} botId={botConfig?.botId} />
                                     </div>
-
                                 </div>
-                            ) : (
+                            </div>
+
+                            {/* Batch Tab Content */}
+                            <div className={activeTab === 'batch' ? '' : 'hidden'}>
                                 <BatchTester
                                     botConfig={botConfig}
                                     guardrailConfig={fullGuardrailConfig}
                                 />
-                            )}
+                            </div>
                         </div>
-                    ) : (
-                        <div className="w-full">
+
+                        {/* Logs View */}
+                        <div className={`w-full ${currentView === 'logs' ? '' : 'hidden'}`}>
                             <header className="mb-8">
                                 <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">System Logs</h1>
                                 <p className="text-sm text-[var(--foreground-muted)]">View real-time backend and application logs</p>
@@ -415,9 +427,9 @@ export default function Home() {
                                 </div>
                             </div>
                         </div>
-                    )}
-                </main>
+                    </main>
+                </div>
             </div>
-        </div>
+        </NotificationProvider>
     );
 }

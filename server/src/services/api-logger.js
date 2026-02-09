@@ -66,7 +66,7 @@ class ApiLogger {
                     statusCode,
                     responseBody: truncatedResponse,
                     latencyMs,
-                    // totalTokens, // Column missing in DB
+                    totalTokens,
                     isError,
                     errorMessage: errorMessage?.substring(0, 1000),
                     provider,
@@ -91,7 +91,7 @@ class ApiLogger {
 
         return {
             startTime,
-            complete: async (statusCode, responseBody, isError = false, errorMessage = null) => {
+            complete: async (statusCode, responseBody, isError = false, errorMessage = null, totalTokens = null) => {
                 const latencyMs = Date.now() - startTime;
                 return this.log({
                     logType,
@@ -105,7 +105,8 @@ class ApiLogger {
                     isError,
                     errorMessage,
                     provider,
-                    model
+                    model,
+                    totalTokens
                 });
             }
         };
@@ -210,7 +211,7 @@ class ApiLogger {
             if (endDate) where.timestamp.lte = new Date(endDate);
         }
 
-        const [totalLogs, errorLogs, byType, byProvider] = await Promise.all([
+        const [totalLogs, errorLogs, byType, byProvider, tokensSum] = await Promise.all([
             prisma.apiLog.count({ where }),
             prisma.apiLog.count({ where: { ...where, isError: true } }),
             prisma.apiLog.groupBy({
@@ -223,12 +224,17 @@ class ApiLogger {
                 where,
                 _count: true,
                 _avg: { latencyMs: true }
+            }),
+            prisma.apiLog.aggregate({
+                where,
+                _sum: { totalTokens: true }
             })
         ]);
 
         return {
             totalLogs,
             errorLogs,
+            totalTokens: tokensSum._sum.totalTokens || 0,
             errorRate: totalLogs > 0 ? (errorLogs / totalLogs * 100).toFixed(2) : 0,
             byType: byType.reduce((acc, item) => {
                 acc[item.logType] = item._count;
