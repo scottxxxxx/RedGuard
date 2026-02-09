@@ -1,13 +1,14 @@
 import { useState, useRef, useEffect } from 'react';
 import { CompositeGuardrailConfig } from '../app/page';
 import { BotConfig } from './BotSettings';
+import { useNotification } from '../context/NotificationContext';
 
 interface Props {
     config: CompositeGuardrailConfig | null;
     botConfig: BotConfig | null;
     onInteractionUpdate?: (userMsg: string, botMsg: string) => void;
-    messages: { role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date }[];
-    setMessages: React.Dispatch<React.SetStateAction<{ role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date }[]>>;
+    messages: { role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean }[];
+    setMessages: React.Dispatch<React.SetStateAction<{ role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean }[]>>;
     userId: string;
     koreSessionId?: string | null;  // The Kore platform session ID
     onSessionReset?: () => void;
@@ -21,6 +22,8 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
     const [showAttackMenu, setShowAttackMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
+    const { showToast } = useNotification();
+    const [lastGeneratedAttack, setLastGeneratedAttack] = useState<string | null>(null);
 
     const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
         if (scrollContainerRef.current) {
@@ -61,12 +64,13 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
             const data = await res.json();
             if (data.prompt) {
                 setInput(data.prompt);
+                setLastGeneratedAttack(data.prompt);
             } else {
-                alert('No prompt generated.');
+                showToast('No prompt generated.', 'info');
             }
         } catch (e) {
             console.error(e);
-            alert('Failed to generate attack. Check backend server.');
+            showToast('Failed to generate attack. Check backend server.', 'error');
         } finally {
             setLoading(false);
         }
@@ -81,8 +85,10 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
         }
 
         const userMsg = input;
-        setMessages(prev => [...prev, { role: 'user', text: userMsg, timestamp: new Date() }]);
+        const isAttack = userMsg === lastGeneratedAttack;
+        setMessages(prev => [...prev, { role: 'user', text: userMsg, timestamp: new Date(), isAttack }]);
         setInput('');
+        setLastGeneratedAttack(null);
         setLoading(true);
 
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -166,11 +172,18 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                 {messages.map((msg, i) => (
                     <div key={i} className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}>
                         <div className={`max-w-[80%] rounded-lg px-4 py-2.5 ${msg.role === 'user'
-                            ? 'bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] text-white shadow-sm'
+                            ? (msg.isAttack
+                                ? 'bg-gradient-to-br from-red-600 to-red-700 text-white shadow-md border border-red-400'
+                                : 'bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-600)] text-white shadow-sm')
                             : msg.role === 'evaluation'
                                 ? (msg.passed ? 'bg-[var(--success)]/10 text-[var(--success)] border border-[var(--success)]/20' : 'bg-[var(--error)]/10 text-[var(--error)] border border-[var(--error)]/20')
                                 : 'bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)] shadow-sm'
                             }`}>
+                            {msg.isAttack && msg.role === 'user' && (
+                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1 text-red-100 flex items-center gap-1">
+                                    <span className="animate-pulse">⚠️</span> Malicious Probe
+                                </div>
+                            )}
                             <pre className="whitespace-pre-wrap font-sans text-sm">{msg.text}</pre>
                             {msg.timestamp && (
                                 <div className={`text-[10px] mt-1 ${msg.role === 'user' ? 'text-white/60' : 'text-gray-400'}`}>

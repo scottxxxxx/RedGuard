@@ -8,6 +8,7 @@ interface Hyperparams {
 }
 
 interface Props {
+    provider?: string;
     prompt: string | null;
     rawResponse: string | null;
     result: any | null;
@@ -25,8 +26,8 @@ const DEFAULT_HYPERPARAMS: Hyperparams = {
     top_p: 1.0
 };
 
-export default function EvaluationInspector({ prompt, rawResponse, result, hyperparams, onHyperparamsChange, onPromptChange, onRequestPayloadRegen, previewPayload, onPayloadChange }: Props) {
-    const [activeTab, setActiveTab] = useState<'prompt' | 'payload' | 'output' | 'full' | 'analysis'>('prompt');
+export default function EvaluationInspector({ provider, prompt, rawResponse, result, hyperparams, onHyperparamsChange, onPromptChange, onRequestPayloadRegen, previewPayload, onPayloadChange }: Props) {
+    const [activeTab, setActiveTab] = useState<'prompt' | 'payload' | 'output' | 'full'>('prompt');
     const [showHyperparams, setShowHyperparams] = useState(false);
     const [localParams, setLocalParams] = useState<Hyperparams>(hyperparams || DEFAULT_HYPERPARAMS);
 
@@ -54,12 +55,22 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
     }, [result, previewPayload]);
 
     const handleParamChange = (key: keyof Hyperparams, value: number) => {
-        const newParams = { ...localParams, [key]: value };
+        let newParams = { ...localParams, [key]: value };
+
+        // For Anthropic, Temperature and Top P are mutually exclusive
+        if (provider === 'anthropic') {
+            if (key === 'temperature' && value !== 0) {
+                newParams.top_p = 1.0; // Reset top_p if using temperature
+            } else if (key === 'top_p' && value !== 1.0) {
+                newParams.temperature = 0.0; // Reset temperature if using top_p
+            }
+        }
+
         setLocalParams(newParams);
         onHyperparamsChange?.(newParams);
     };
 
-    const handleTabChange = async (newTab: 'prompt' | 'payload' | 'output' | 'full' | 'analysis') => {
+    const handleTabChange = async (newTab: 'prompt' | 'payload' | 'output' | 'full') => {
         // Leaving Prompt Tab -> Entering Payload Tab
         if (activeTab === 'prompt' && newTab === 'payload') {
             // Refresh if prompt changed OR if we don't have a payload yet
@@ -138,7 +149,6 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
             };
         }
 
-        const resultData = result.result || result;
         const overallStatus = resultData.bot_response_evaluation?.overall?.status || resultData.overall?.status;
 
         // Passed Cleanly
@@ -202,6 +212,7 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
         };
     };
 
+    const resultData = result ? (result.result || result) : null;
     const verdictInfo = getVerdictInfo();
 
     return (
@@ -258,18 +269,18 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
                 {showHyperparams && (
                     <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 grid grid-cols-3 gap-4">
                         <div>
-                            <label className={`block text-xs font-medium mb-1 ${localParams.top_p !== 1.0 ? 'text-gray-400 opacity-50' : 'text-gray-500 dark:text-gray-400'}`}>
-                                Temperature {localParams.top_p !== 1.0 && "(Ignored)"}
+                            <label className={`block text-xs font-medium mb-1 ${(provider === 'anthropic' && localParams.top_p !== 1.0) ? 'text-gray-400 opacity-50' : 'text-gray-500 dark:text-gray-400'}`}>
+                                Temperature {(provider === 'anthropic' && localParams.top_p !== 1.0) && "(Ignored)"}
                             </label>
                             <input
                                 type="number"
                                 min="0"
                                 max="2"
                                 step="0.1"
-                                disabled={localParams.top_p !== 1.0}
-                                value={localParams.top_p !== 1.0 ? 0 : localParams.temperature}
+                                disabled={provider === 'anthropic' && localParams.top_p !== 1.0}
+                                value={(provider === 'anthropic' && localParams.top_p !== 1.0) ? 0 : localParams.temperature}
                                 onChange={(e) => handleParamChange('temperature', parseFloat(e.target.value) || 0)}
-                                className={`w-full px-2 py-1.5 text-sm border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-opacity ${localParams.top_p !== 1.0 ? 'opacity-30 cursor-not-allowed border-gray-200' : 'border-gray-300 dark:border-gray-600'}`}
+                                className={`w-full px-2 py-1.5 text-sm border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-opacity ${(provider === 'anthropic' && localParams.top_p !== 1.0) ? 'opacity-30 cursor-not-allowed border-gray-200' : 'border-gray-300 dark:border-gray-600'}`}
                             />
                             <span className="text-[10px] text-gray-400">0 = deterministic</span>
                         </div>
@@ -280,26 +291,27 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
                             <input
                                 type="number"
                                 min="100"
-                                max="4096"
+                                max="8192"
                                 step="100"
                                 value={localParams.max_tokens}
-                                onChange={(e) => handleParamChange('max_tokens', parseInt(e.target.value) || 1024)}
+                                onChange={(e) => handleParamChange('max_tokens', parseInt(e.target.value) || 4096)}
                                 className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
                             />
-                            <span className="text-[10px] text-gray-400">Response length limit</span>
+                            <span className="text-[10px] text-gray-400">Response limit</span>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
-                                Top P {localParams.temperature !== 0 && localParams.top_p === 1.0 && "(Default)"}
+                            <label className={`block text-xs font-medium mb-1 ${(provider === 'anthropic' && localParams.temperature !== 0) ? 'text-gray-400 opacity-50' : 'text-gray-500 dark:text-gray-400'}`}>
+                                Top P {(provider === 'anthropic' && localParams.temperature !== 0) ? "(Ignored)" : (localParams.temperature !== 0 && localParams.top_p === 1.0 && "(Default)")}
                             </label>
                             <input
                                 type="number"
                                 min="0"
                                 max="1"
                                 step="0.05"
-                                value={localParams.top_p}
+                                disabled={provider === 'anthropic' && localParams.temperature !== 0}
+                                value={(provider === 'anthropic' && localParams.temperature !== 0) ? 1 : localParams.top_p}
                                 onChange={(e) => handleParamChange('top_p', parseFloat(e.target.value) || 1)}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                className={`w-full px-2 py-1.5 text-sm border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-opacity ${(provider === 'anthropic' && localParams.temperature !== 0) ? 'opacity-30 cursor-not-allowed border-gray-200' : 'border-gray-300 dark:border-gray-600'}`}
                             />
                             <span className="text-[10px] text-gray-400">Nucleus sampling</span>
                         </div>
@@ -325,19 +337,13 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
                     className={`flex-1 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
                     onClick={() => handleTabChange('output')}
                 >
-                    LLM Output
+                    Evaluation Results
                 </button>
                 <button
                     className={`flex-1 py-3 text-sm font-medium ${activeTab === 'full' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
                     onClick={() => handleTabChange('full')}
                 >
-                    Provider Response
-                </button>
-                <button
-                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'analysis' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
-                    onClick={() => handleTabChange('analysis')}
-                >
-                    System Analysis
+                    Raw Response
                 </button>
             </div>
 
@@ -369,41 +375,6 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
                     <pre className="whitespace-pre-wrap text-blue-400">
                         {rawResponse || "No evaluation output yet."}
                     </pre>
-                ) : activeTab === 'analysis' ? (
-                    <div className="text-gray-300 space-y-4">
-                        {result?.result?.guardrail_system_performance ? (
-                            <>
-                                <div className="border-b border-gray-700 pb-2">
-                                    <h3 className="text-sm font-bold text-indigo-400 mb-1 uppercase tracking-wider">System Audit Summary</h3>
-                                    <p className="text-lg text-white">{result.result.guardrail_system_performance.overall_assessment?.rating?.toUpperCase() || "N/A"}</p>
-                                    <p className="text-gray-400 italic">"{result.result.guardrail_system_performance.overall_assessment?.comment}"</p>
-                                </div>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="bg-gray-800 p-2 rounded">
-                                        <p className="text-[10px] text-gray-500 uppercase">Detection Accuracy</p>
-                                        <p className="text-xs font-semibold">{result.result.guardrail_system_performance.detection_accuracy?.rating || "N/A"}</p>
-                                    </div>
-                                    <div className="bg-gray-800 p-2 rounded">
-                                        <p className="text-[10px] text-gray-500 uppercase">Fallback Behavior</p>
-                                        <p className="text-xs font-semibold">{result.result.guardrail_system_performance.fallback_behavior?.triggered_correctly ? "Correct" : "Incorrect"}</p>
-                                    </div>
-                                </div>
-                                <div>
-                                    <p className="text-[10px] text-gray-500 uppercase mb-1">Detailed Findings</p>
-                                    <ul className="list-disc list-inside space-y-1 text-xs">
-                                        <li><strong>Detection:</strong> {result.result.guardrail_system_performance.detection_accuracy?.details}</li>
-                                        <li><strong>False Positives:</strong> {result.result.guardrail_system_performance.false_positives?.details || "None reported"}</li>
-                                        <li><strong>False Negatives:</strong> {result.result.guardrail_system_performance.false_negatives?.details || "None reported"}</li>
-                                        <li><strong>Coverage Gaps:</strong> {result.result.guardrail_system_performance.coverage_gaps?.recommendations || "No gaps identified"}</li>
-                                    </ul>
-                                </div>
-                            </>
-                        ) : (
-                            <div className="text-gray-500 p-4 border border-dashed border-gray-700 rounded text-center">
-                                Detailed system performance audit only available after running an evaluation.
-                            </div>
-                        )}
-                    </div>
                 ) : (
                     <pre className="whitespace-pre-wrap text-purple-400">
                         {result?.debug?.fullResponse || result?.fullApiResponse || "Formatted response not available.\n\nThis shows the complete formatted response from the LLM provider including metadata like token usage."}

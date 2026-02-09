@@ -21,6 +21,7 @@ interface ApiLog {
 interface LogStats {
     totalLogs: number;
     errorLogs: number;
+    totalTokens: number;
     errorRate: string;
     byType: Record<string, number>;
     byProvider: Array<{ provider: string; count: number; avgLatencyMs: number }>;
@@ -116,7 +117,7 @@ export default function LogViewer() {
 
             {/* Stats Cards */}
             {stats && (
-                <div className="grid grid-cols-4 gap-4 mb-6">
+                <div className="grid grid-cols-5 gap-4 mb-6">
                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                         <div className="text-2xl font-bold text-gray-900 dark:text-white">{stats.totalLogs}</div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">Total Requests</div>
@@ -132,6 +133,10 @@ export default function LogViewer() {
                     <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4">
                         <div className="text-2xl font-bold text-purple-600">{stats.byType['llm_evaluate'] || 0}</div>
                         <div className="text-sm text-gray-500 dark:text-gray-400">LLM Evaluations</div>
+                    </div>
+                    <div className="bg-gray-50 dark:bg-gray-700 rounded-lg p-4 border-l-4 border-green-500 shadow-sm">
+                        <div className="text-2xl font-bold text-green-600">{(stats.totalTokens || 0).toLocaleString()}</div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400 font-medium">Total Tokens Used</div>
                     </div>
                 </div>
             )}
@@ -193,11 +198,11 @@ export default function LogViewer() {
                     <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
                         {loading ? (
                             <tr>
-                                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">Loading...</td>
+                                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">Loading...</td>
                             </tr>
                         ) : logs.length === 0 ? (
                             <tr>
-                                <td colSpan={6} className="px-4 py-8 text-center text-gray-500">No logs found</td>
+                                <td colSpan={7} className="px-4 py-8 text-center text-gray-500">No logs found</td>
                             </tr>
                         ) : (
                             logs.map((log) => (
@@ -223,11 +228,11 @@ export default function LogViewer() {
                                                 {log.statusCode || (log.isError ? 'Error' : 'OK')}
                                             </span>
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                                            {log.totalTokens ? log.totalTokens.toLocaleString() : '-'}
+                                        <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300 font-mono">
+                                            {(log.totalTokens !== undefined && log.totalTokens !== null) ? log.totalTokens.toLocaleString() : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">
-                                            {log.latencyMs ? `${log.latencyMs}ms` : '-'}
+                                            {log.latencyMs ? `${log.latencyMs.toLocaleString()}ms` : '-'}
                                         </td>
                                         <td className="px-4 py-3 text-sm text-gray-400">
                                             {log.isError ? log.errorMessage?.substring(0, 50) : 'Click to expand'}
@@ -235,17 +240,17 @@ export default function LogViewer() {
                                     </tr>
                                     {expandedLog === log.id && (
                                         <tr>
-                                            <td colSpan={6} className="px-4 py-4 bg-gray-100 dark:bg-gray-900">
+                                            <td colSpan={7} className="px-4 py-4 bg-gray-100 dark:bg-gray-900">
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
                                                         <h4 className="font-medium text-gray-900 dark:text-white mb-2">Request</h4>
-                                                        <pre className="text-xs bg-gray-800 text-green-400 p-3 rounded-lg overflow-auto max-h-48">
+                                                        <pre className="text-xs bg-gray-800 text-green-400 p-3 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap">
                                                             {log.requestBody || 'No request body'}
                                                         </pre>
                                                     </div>
                                                     <div>
                                                         <h4 className="font-medium text-gray-900 dark:text-white mb-2">Response</h4>
-                                                        <pre className="text-xs bg-gray-800 text-blue-400 p-3 rounded-lg overflow-auto max-h-48">
+                                                        <pre className="text-xs bg-gray-800 text-blue-400 p-3 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap">
                                                             {log.responseBody || 'No response body'}
                                                         </pre>
                                                     </div>

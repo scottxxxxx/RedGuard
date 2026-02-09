@@ -27,7 +27,22 @@ export default function BotSettings({ onConfigChange }: Props) {
         inspectorClientSecret: ''
     });
 
+    // Load from localStorage on mount
     useEffect(() => {
+        const savedConfig = localStorage.getItem('redguard_bot_config');
+        if (savedConfig) {
+            try {
+                const parsed = JSON.parse(savedConfig);
+                setConfig(prev => ({ ...prev, ...parsed }));
+            } catch (e) {
+                console.error("Failed to parse saved bot config", e);
+            }
+        }
+    }, []);
+
+    // Save to localStorage when config changes
+    useEffect(() => {
+        localStorage.setItem('redguard_bot_config', JSON.stringify(config));
         onConfigChange(config);
     }, [config, onConfigChange]);
 

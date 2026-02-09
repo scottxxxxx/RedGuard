@@ -12,6 +12,8 @@ interface EvaluationRun {
     injectionPass: boolean | null | string;
     regexPass: boolean | null | string;
     overallPass: boolean;
+    isAttack: boolean;
+    totalTokens?: number;
     createdAt: string;
 }
 
@@ -29,17 +31,35 @@ const parseConversation = (promptSent: string) => {
     if (!promptSent) return [];
 
     const turns: { role: 'user' | 'bot', content: string }[] = [];
+    let searchableText = promptSent;
+
+    // Strategy 0: If prompt is JSON (Request Payload), extract the content
+    try {
+        if (promptSent.trim().startsWith('{')) {
+            const json = JSON.parse(promptSent);
+            if (json.messages && Array.isArray(json.messages)) {
+                // OpenAI/Anthropic format
+                searchableText = json.messages.map((m: any) => m.content).join('\n\n');
+            } else if (json.contents && Array.isArray(json.contents)) {
+                // Gemini format
+                searchableText = json.contents.map((c: any) => c.parts?.[0]?.text || '').join('\n\n');
+            }
+        }
+    } catch (e) {
+        // Not JSON, continue with raw text
+    }
 
     // Strategy 1: Look specifically for the transcript section in v4 prompts
-    const transcriptMatch = promptSent.match(/## Conversation Transcript\s*([^]*?)\s*---/i);
-    const searchableText = transcriptMatch ? transcriptMatch[1] : promptSent;
+    const transcriptMatch = searchableText.match(/## Conversation Transcript\s*([^]*?)\s*---/i) ||
+        searchableText.match(/### Conversation Transcript\s*([^]*?)\s*---/i);
+    const textToAnalyze = transcriptMatch ? transcriptMatch[1] : searchableText;
 
     // Strategy 2: Robust Regex for "User: \"text\"" or "Bot: \"text\""
     // Also handles the "- user:" format from older prompts
-    const pattern = /(?:- )?(User|Bot|user|bot):\s*"?([^]*?)(?="?\s*(?:\n(?:- )?(?:User|Bot|user|bot):|\nInput Data:|\n\n|##|---|$))/gi;
+    const pattern = /(?:- )?(User|Bot|user|bot):\s*"?([^]*?)(?="?\s*(?:\n(?:- )?(?:User|Bot|user|bot):|\nInput Data:|\n\n|###|##|---|$))/gi;
     let match;
 
-    while ((match = pattern.exec(searchableText)) !== null) {
+    while ((match = pattern.exec(textToAnalyze)) !== null) {
         const roleStr = match[1].toLowerCase();
         const role = roleStr.includes('user') ? 'user' : 'bot';
         let content = match[2].trim();
@@ -47,14 +67,14 @@ const parseConversation = (promptSent: string) => {
         // Clean up quotes if present
         content = content.replace(/^"|"$/g, '').trim();
 
-        if (content && content !== '{{conversation_transcript}}') {
+        if (content && content !== '{{conversation_transcript}}' && content !== '{{conversation_history}}') {
             turns.push({ role, content });
         }
     }
 
     // Strategy 3: Line-by-line fallback if regex failed
     if (turns.length === 0) {
-        const lines = searchableText.split('\n');
+        const lines = textToAnalyze.split('\n');
         let currentRole: 'user' | 'bot' | null = null;
         let currentContent: string[] = [];
 
@@ -66,16 +86,13 @@ const parseConversation = (promptSent: string) => {
             const isBot = lowerLine.startsWith('bot:') || lowerLine.startsWith('- bot:');
 
             if (isUser || isBot) {
-                // Save previous turn
                 if (currentRole && currentContent.length > 0) {
                     const content = currentContent.join('\n').replace(/^"|"$/g, '').trim();
-                    if (content && content !== '{{conversation_transcript}}') {
+                    if (content && content !== '{{conversation_transcript}}' && content !== '{{conversation_history}}') {
                         turns.push({ role: currentRole, content });
                     }
                 }
-
                 currentRole = isUser ? 'user' : 'bot';
-                // Remove prefix
                 const prefixMatch = trimmed.match(/^(?:- )?(?:user|bot):\s*/i);
                 currentContent = [trimmed.substring(prefixMatch ? prefixMatch[0].length : 0).trim()];
             } else if (currentRole && trimmed && !trimmed.startsWith('##') && !trimmed.startsWith('---')) {
@@ -83,10 +100,9 @@ const parseConversation = (promptSent: string) => {
             }
         }
 
-        // Save last turn
         if (currentRole && currentContent.length > 0) {
             const content = currentContent.join('\n').replace(/^"|"$/g, '').trim();
-            if (content && content !== '{{conversation_transcript}}') {
+            if (content && content !== '{{conversation_transcript}}' && content !== '{{conversation_history}}') {
                 turns.push({ role: currentRole, content });
             }
         }
@@ -139,6 +155,16 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     useEffect(() => {
         fetchRuns();
     }, []);
+
+    // Helper to get conversation turns from a run
+    const getRunTurns = (run: EvaluationRun) => {
+        let turns = parseConversation(run.promptSent);
+        // Fallback: If prompt didn't yield turns but userInput looks like it has markers
+        if (turns.length === 0 && (run.userInput.includes('User:') || run.userInput.includes('Bot:'))) {
+            turns = parseConversation(run.userInput);
+        }
+        return turns;
+    };
 
     const clearAllRuns = async () => {
         if (!confirm('Are you sure you want to clear all run history?')) return;
@@ -324,7 +350,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                         </thead>
                         <tbody>
                             {runs.map((run) => {
-                                const turns = parseConversation(run.promptSent);
+                                const turns = getRunTurns(run);
                                 const turnCount = Math.max(turns.filter(t => t.role === 'user').length, 1);
 
                                 return (
@@ -344,11 +370,12 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                         </span>
                                                     )}
                                                     <div className="flex flex-col min-w-0">
-                                                        <span className="text-xs text-blue-600 truncate" title={run.userInput}>
-                                                            <strong>U:</strong> {truncate(run.userInput, 40)}
+                                                        <span className={`text-xs truncate ${run.isAttack ? 'text-red-600 font-bold' : 'text-blue-600'}`} title={run.userInput}>
+                                                            {run.isAttack && <span className="mr-1">🚨</span>}
+                                                            <strong>U:</strong> {truncate(turns.filter(t => t.role === 'user').pop()?.content || run.userInput, 40)}
                                                         </span>
                                                         <span className="text-xs text-gray-600 truncate" title={run.botResponse}>
-                                                            <strong>B:</strong> {truncate(run.botResponse, 40)}
+                                                            <strong>B:</strong> {truncate(turns.filter(t => t.role === 'bot').pop()?.content || run.botResponse, 40)}
                                                         </span>
                                                     </div>
                                                 </div>
@@ -371,8 +398,13 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                     <div className="space-y-4">
                                                         {/* Conversation View */}
                                                         <div>
-                                                            <h4 className="font-semibold text-[var(--foreground)] mb-2 text-sm">
-                                                                Conversation {turns.length > 0 && `(${Math.ceil(turns.length / 2)} turns)`}
+                                                            <h4 className="font-semibold text-[var(--foreground)] mb-2 text-sm flex items-center justify-between">
+                                                                <span>Conversation {turns.length > 0 && `(${Math.ceil(turns.length / 2)} turns)`}</span>
+                                                                {(run.totalTokens !== undefined && run.totalTokens !== null) && (
+                                                                    <span className="text-[10px] font-normal text-[var(--foreground-muted)] bg-gray-100 px-1.5 py-0.5 rounded">
+                                                                        {run.totalTokens.toLocaleString()} tokens
+                                                                    </span>
+                                                                )}
                                                             </h4>
                                                             <div className="bg-[var(--background)] rounded-lg border border-[var(--border)] p-4 max-h-96 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-300">
                                                                 {turns.length > 0 ? (
@@ -383,13 +415,20 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                                         >
                                                                             <div
                                                                                 className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${turn.role === 'user'
-                                                                                    ? 'bg-blue-100 text-blue-900'
+                                                                                    ? (run.isAttack && idx === turns.length - 2 // Identify the attack turn
+                                                                                        ? 'bg-red-600 text-white border border-red-400 font-medium'
+                                                                                        : 'bg-blue-100 text-blue-900')
                                                                                     : 'bg-gray-100 text-gray-900'
                                                                                     }`}
                                                                             >
-                                                                                <span className="font-semibold text-[10px] uppercase tracking-wide opacity-60">
+                                                                                <span className={`font-semibold text-[10px] uppercase tracking-wide opacity-60 ${run.isAttack && idx === turns.length - 2 ? 'text-red-100' : ''}`}>
                                                                                     {turn.role === 'user' ? 'User' : 'Bot'}
                                                                                 </span>
+                                                                                {run.isAttack && idx === turns.length - 2 && (
+                                                                                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-red-100">
+                                                                                        Malicious Probe
+                                                                                    </div>
+                                                                                )}
                                                                                 <p className="mt-0.5">{turn.content}</p>
                                                                             </div>
                                                                         </div>
