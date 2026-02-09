@@ -49,10 +49,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
 
             const data = await res.json();
 
-            // Look for bot name in the connection response (metadata)
-            // Some versions of Webhook V2 include botName or botInfo in the root or session object
             const foundName = data.botName || data.botInfo?.name || data.meta?.botName;
-
             if (foundName && onBotNameUpdate) {
                 onBotNameUpdate(foundName);
             }
@@ -68,7 +65,6 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
     const validateConnection = async (currentConfig: BotConfig) => {
         if (!currentConfig.botId || !currentConfig.clientId || !currentConfig.clientSecret) return;
 
-        setIsValidating(true);
         setValidationStatus('idle');
         setValidationMessage(null);
 
@@ -96,8 +92,6 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             setValidationStatus('error');
             setValidationMessage(err.message);
             if (onBotNameUpdate) onBotNameUpdate(null);
-        } finally {
-            setIsValidating(false);
         }
     };
 
@@ -111,7 +105,8 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 setConfig(merged);
                 // Try to validate on load if we have full config
                 if (merged.botId && merged.clientId && merged.clientSecret) {
-                    validateConnection(merged);
+                    setIsValidating(true);
+                    validateConnection(merged).finally(() => setIsValidating(false));
                 }
             } catch (e) {
                 console.error("Failed to parse saved bot config", e);
@@ -122,7 +117,8 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
     // Trigger greeting when userId changes (e.g. on session reset)
     useEffect(() => {
         if (userId && config.botId && config.clientId && config.clientSecret) {
-            initializeChat(config);
+            setIsValidating(true);
+            initializeChat(config).finally(() => setIsValidating(false));
         }
     }, [userId]);
 
@@ -231,9 +227,15 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
 
             <div className="mt-5 pt-4 border-t border-[var(--border)]">
                 <button
-                    onClick={() => {
-                        if (onSessionReset) onSessionReset();
-                        validateConnection(config);
+                    onClick={async () => {
+                        setIsValidating(true);
+                        try {
+                            if (onSessionReset) onSessionReset();
+                            await validateConnection(config);
+                            await initializeChat(config);
+                        } finally {
+                            setIsValidating(false);
+                        }
                     }}
                     disabled={isValidating}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-lg transition-all hover:shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
