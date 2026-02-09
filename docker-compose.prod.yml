@@ -1,0 +1,35 @@
+version: '3.8'
+
+services:
+  server:
+    # Use the same build context as dev, but tag specifically for Hub
+    build: ./server
+    image: ${DOCKER_HUB_USERNAME}/redguard-server:latest
+    ports:
+      - "3001:3001"
+    environment:
+      - NODE_ENV=production
+      - PORT=3001
+      # Note: For SQLite persistence in prod, you usually need a volume mapped to the host
+      - DATABASE_URL=file:/data/prod.db
+    volumes:
+      # This is the ONLY volume needed in prod - for persistent data storage
+      # We DO NOT mount the source code here
+      - redguard_data:/data
+
+  client:
+    build: ./client
+    image: ${DOCKER_HUB_USERNAME}/redguard-client:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NODE_ENV=production
+      # In production, client needs to know the public URL of the server
+      # If running on the same machine, localhost usually works for browser-side fetches
+      # But server-side rendering might need internal docker networking (http://server:3001)
+      - NEXT_PUBLIC_API_URL=/api
+    depends_on:
+      - server
+
+volumes:
+  redguard_data:
