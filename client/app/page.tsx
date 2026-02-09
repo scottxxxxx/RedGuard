@@ -360,6 +360,7 @@ export default function Home() {
                                                     onConfigChange={setBotConfig}
                                                     onBotNameUpdate={setBotName}
                                                     onConnect={handleBotConnect}
+                                                    userId={userId}
                                                 />
                                             </div>
                                             <div className="col-span-8 h-full min-h-0">

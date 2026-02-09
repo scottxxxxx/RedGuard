@@ -15,9 +15,10 @@ interface Props {
     onConfigChange: (config: BotConfig) => void;
     onBotNameUpdate?: (name: string | null) => void;
     onConnect?: (botGreeting: string) => void;
+    userId?: string;
 }
 
-export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect }: Props) {
+export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect, userId }: Props) {
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
         clientId: '***REMOVED_KORE_CLIENT_ID***',
@@ -41,7 +42,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     botConfig: currentConfig,
-                    userId: `RedGuard-init-${Math.random().toString(36).substring(7)}`
+                    userId: userId || `RedGuard-init-${Math.random().toString(36).substring(7)}`
                 })
             });
 
