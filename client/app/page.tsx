@@ -13,6 +13,7 @@ import LogViewer from "@/components/LogViewer";
 import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { NotificationProvider } from "@/context/NotificationContext";
+import RedGuardIntro from "@/components/RedGuardIntro";
 
 // Composite type for ChatConsole
 export type CompositeGuardrailConfig = GuardrailPolicy & {
@@ -255,7 +256,7 @@ export default function Home() {
                                     className="h-16 w-auto object-contain"
                                 />
                                 <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.6</span>
+                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.7</span>
                             </div>
                             <div className="flex items-center gap-4">
                                 <div className="text-xs font-mono bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-md text-gray-500 hidden md:block">
@@ -305,17 +306,7 @@ export default function Home() {
                     <main className="flex-1 overflow-auto bg-[var(--background)] p-8">
                         {/* Evaluator View */}
                         <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
-                            <header className="mb-10 text-center max-w-4xl mx-auto py-8">
-                                <h1 className="text-4xl md:text-5xl font-bold text-[var(--foreground)] mb-6 tracking-tight leading-tight">
-                                    Test, verify, and harden your bot's{' '}
-                                    <span className="text-red-600 dark:text-red-500 relative inline-block">
-                                        AI safety guardrails.
-                                    </span>
-                                </h1>
-                                <p className="text-lg text-[var(--foreground-muted)] max-w-2xl mx-auto leading-relaxed">
-                                    Chat with your bot in a live session while an AI judge evaluates every response against your configured guardrail policies, catching what passed, what failed, and what's missing.
-                                </p>
-                            </header>
+                            <RedGuardIntro />
 
                             {/* Tab Headers */}
                             <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
