@@ -338,76 +338,103 @@ export default function Home() {
                             <div className={activeTab === 'live' ? '' : 'hidden'}>
                                 <div className="space-y-6">
                                     {/* Row 1: Bot Config & Chat Console */}
-                                    <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
-                                        <div className="col-span-4 h-full min-h-0">
-                                            <BotSettings onConfigChange={setBotConfig} />
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-3">
+                                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">1</span>
+                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Capture Interaction</h3>
+                                            <span className="text-xs text-gray-400">- Configure your bot and chat to generate a conversation transcript.</span>
                                         </div>
-                                        <div className="col-span-8 h-full min-h-0">
-                                            <ChatConsole
-                                                config={fullGuardrailConfig}
-                                                botConfig={botConfig}
-                                                onInteractionUpdate={handleInteractionUpdate}
-                                                messages={messages}
-                                                setMessages={setMessages}
-                                                userId={userId}
-                                                koreSessionId={koreSessionId}
-                                                onSessionReset={handleSessionReset}
-                                                onBotResponse={handleBotResponse}
-                                                onKoreSessionUpdate={setKoreSessionId}
-                                            />
+                                        <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
+                                            <div className="col-span-4 h-full min-h-0">
+                                                <BotSettings onConfigChange={setBotConfig} />
+                                            </div>
+                                            <div className="col-span-8 h-full min-h-0">
+                                                <ChatConsole
+                                                    config={fullGuardrailConfig}
+                                                    botConfig={botConfig}
+                                                    onInteractionUpdate={handleInteractionUpdate}
+                                                    messages={messages}
+                                                    setMessages={setMessages}
+                                                    userId={userId}
+                                                    koreSessionId={koreSessionId}
+                                                    onSessionReset={handleSessionReset}
+                                                    onBotResponse={handleBotResponse}
+                                                    onKoreSessionUpdate={setKoreSessionId}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Row 2: Guardrail Config & Kore Logs */}
-                                    <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
-                                        <div className="col-span-4 h-full min-h-0">
-                                            <GuardrailSettings onConfigChange={setGuardrailPolicy} />
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-3 mt-2">
+                                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">2</span>
+                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Define Guardrails</h3>
+                                            <span className="text-xs text-gray-400">- Set your safety policies and inspect real-time system logs.</span>
                                         </div>
-                                        <div className="col-span-8 h-full min-h-0">
-                                            <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} />
+                                        <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
+                                            <div className="col-span-4 h-full min-h-0">
+                                                <GuardrailSettings onConfigChange={setGuardrailPolicy} />
+                                            </div>
+                                            <div className="col-span-8 h-full min-h-0">
+                                                <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} />
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Row 3: Evaluation Settings & Inspector */}
-                                    <div className="grid grid-cols-12 gap-6">
-                                        <div className="col-span-4">
-                                            <EvaluationSettings onConfigChange={setLlmConfig} />
+                                    <div>
+                                        <div className="flex items-center gap-2 mb-3 mt-2">
+                                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">3</span>
+                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Configure Evaluation</h3>
+                                            <span className="text-xs text-gray-400">- Choose the LLM that will judge the conversation against your guardrails.</span>
                                         </div>
-                                        <div className="col-span-8">
-                                            <EvaluationInspector
-                                                provider={llmConfig?.provider}
-                                                prompt={previewPrompt}
-                                                rawResponse={evalRawResponse}
-                                                result={evalResult}
-                                                previewPayload={previewPayload}
-                                                hyperparams={hyperparams}
-                                                onHyperparamsChange={setHyperparams}
-                                                onPromptChange={setPreviewPrompt}
-                                                onRequestPayloadRegen={handleRequestPayloadRegen}
-                                                onPayloadChange={setPreviewPayload}
-                                            />
+                                        <div className="grid grid-cols-12 gap-6">
+                                            <div className="col-span-4">
+                                                <EvaluationSettings onConfigChange={setLlmConfig} />
+                                            </div>
+                                            <div className="col-span-8">
+                                                <EvaluationInspector
+                                                    provider={llmConfig?.provider}
+                                                    prompt={previewPrompt}
+                                                    rawResponse={evalRawResponse}
+                                                    result={evalResult}
+                                                    previewPayload={previewPayload}
+                                                    hyperparams={hyperparams}
+                                                    onHyperparamsChange={setHyperparams}
+                                                    onPromptChange={setPreviewPrompt}
+                                                    onRequestPayloadRegen={handleRequestPayloadRegen}
+                                                    onPayloadChange={setPreviewPayload}
+                                                />
+                                            </div>
                                         </div>
                                     </div>
 
                                     {/* Row 4: Evaluate Button */}
-                                    <div className="flex justify-center mt-6 mb-2">
-                                        <button
-                                            onClick={handleEvaluate}
-                                            disabled={isEvaluating || !interaction || !llmConfig?.apiKey}
-                                            className="w-1/2 py-4 text-lg font-bold uppercase tracking-widest text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 rounded-lg shadow-lg hover:shadow-xl transform transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
-                                        >
-                                            {isEvaluating ? (
-                                                <span className="flex items-center justify-center gap-3">
-                                                    <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                    </svg>
-                                                    Running Evaluation...
-                                                </span>
-                                            ) : (
-                                                'Perform Guardrail Evaluation'
-                                            )}
-                                        </button>
+                                    <div>
+                                        <div className="flex items-center justify-center gap-2 mb-2 mt-4">
+                                            <span className="bg-emerald-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">4</span>
+                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Execute</h3>
+                                        </div>
+                                        <div className="flex justify-center mb-2">
+                                            <button
+                                                onClick={handleEvaluate}
+                                                disabled={isEvaluating || !interaction || !llmConfig?.apiKey}
+                                                className="w-1/2 py-4 text-lg font-bold uppercase tracking-widest text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 rounded-lg shadow-lg hover:shadow-xl transform transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+                                            >
+                                                {isEvaluating ? (
+                                                    <span className="flex items-center justify-center gap-3">
+                                                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        Running Evaluation...
+                                                    </span>
+                                                ) : (
+                                                    'Perform Guardrail Evaluation'
+                                                )}
+                                            </button>
+                                        </div>
                                     </div>
 
                                     {/* Row 5: History */}
