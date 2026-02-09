@@ -59,12 +59,13 @@ jobs:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
-          host: ${{ secrets.GCP_HOST }}      # Add this secret in GitHub repo settings (Wait for us to find IP)
-          username: ${{ secrets.GCP_USERNAME }}  # e.g., 'scottguida'
-          key: ${{ secrets.GCP_SSH_KEY }}    # Private SSH key
+          host: ${{ secrets.GCP_HOST }}
+          username: ${{ secrets.GCP_USERNAME }}
+          key: ${{ secrets.GCP_SSH_KEY }}
+          options: -o StrictHostKeyChecking=no
           script: |
-            # Login to GHCR on the server
-            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+            # Login to GHCR on the server (using sudo for docker)
+            echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Create/Update the docker-compose.prod.yml on the server
             cat <<EOF > docker-compose.prod.yml
@@ -96,6 +97,6 @@ jobs:
               redguard_data:
             EOF
             
-            # Pull latest images and restart
-            docker compose -f docker-compose.prod.yml pull
-            docker compose -f docker-compose.prod.yml up -d
+            # Pull latest images and restart (using sudo)
+            sudo docker compose -f docker-compose.prod.yml pull
+            sudo docker compose -f docker-compose.prod.yml up -d
