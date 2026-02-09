@@ -179,16 +179,7 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                     <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded">
                         {logs.length} logs
                     </span>
-                    <button
-                        onClick={isPolling ? stopPolling : fetchLogs}
-                        disabled={isLoading && !isPolling || !botConfig}
-                        className={`px-3 py-1 text-xs rounded transition-colors ${isPolling
-                            ? 'bg-amber-100 text-amber-700 hover:bg-amber-200 border border-amber-200'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700 disabled:opacity-50 disabled:cursor-not-allowed'
-                            }`}
-                    >
-                        {isPolling ? 'Stop Polling' : (isLoading ? 'Fetching...' : 'Fetch Logs')}
-                    </button>
+
                 </div>
             </h3>
 
