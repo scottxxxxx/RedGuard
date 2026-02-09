@@ -361,6 +361,7 @@ export default function Home() {
                                                     onBotNameUpdate={setBotName}
                                                     onConnect={handleBotConnect}
                                                     onSessionReset={handleSessionReset}
+                                                    onKoreSessionUpdate={setKoreSessionId}
                                                     userId={userId}
                                                 />
                                             </div>

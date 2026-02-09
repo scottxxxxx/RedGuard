@@ -16,10 +16,11 @@ interface Props {
     onBotNameUpdate?: (name: string | null) => void;
     onConnect?: (botGreeting: string) => void;
     onSessionReset?: () => void;
+    onKoreSessionUpdate?: (sessionId: string) => void;
     userId?: string;
 }
 
-export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect, onSessionReset, userId }: Props) {
+export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect, onSessionReset, onKoreSessionUpdate, userId }: Props) {
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
         clientId: '***REMOVED_KORE_CLIENT_ID***',
@@ -52,6 +53,11 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             const foundName = data.botName || data.botInfo?.name || data.meta?.botName;
             if (foundName && onBotNameUpdate) {
                 onBotNameUpdate(foundName);
+            }
+
+            // Extract Kore session ID from connection response
+            if (data.sessionId && onKoreSessionUpdate) {
+                onKoreSessionUpdate(data.sessionId);
             }
 
             if (res.ok && data.data?.[0]?.val && onConnect) {
