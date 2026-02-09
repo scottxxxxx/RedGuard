@@ -17,11 +17,14 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: 'read'
-      id-token: 'write'
+      packages: 'write'
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Lowercase Repo Name
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> $GITHUB_ENV
 
       # ------------------------------------------------------------------
       # 1. Login to GitHub Container Registry (GHCR)
@@ -41,14 +44,14 @@ jobs:
         with:
           context: ./server
           push: true
-          tags: ghcr.io/${{ github.repository }}/server:latest
+          tags: ghcr.io/${{ env.REPO_LC }}/server:latest
 
       - name: Build and Push Client Image
         uses: docker/build-push-action@v5
         with:
           context: ./client
           push: true
-          tags: ghcr.io/${{ github.repository }}/client:latest
+          tags: ghcr.io/${{ env.REPO_LC }}/client:latest
 
       # ------------------------------------------------------------------
       # 3. Deploy to GCP Compute Engine via SSH
@@ -68,7 +71,7 @@ jobs:
             version: '3.8'
             services:
               server:
-                image: ghcr.io/${{ github.repository }}/server:latest
+                image: ghcr.io/${{ env.REPO_LC }}/server:latest
                 ports:
                   - "3001:3001"
                 environment:
@@ -80,7 +83,7 @@ jobs:
                   - redguard_data:/data
               
               client:
-                image: ghcr.io/${{ github.repository }}/client:latest
+                image: ghcr.io/${{ env.REPO_LC }}/client:latest
                 ports:
                   - "3000:3000"
                 environment:
