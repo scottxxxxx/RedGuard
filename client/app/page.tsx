@@ -255,11 +255,11 @@ export default function Home() {
                                     className="h-16 w-auto object-contain"
                                 />
                                 <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.5</span>
+                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.6</span>
                             </div>
                             <div className="flex items-center gap-4">
-                                <div className="text-sm text-[var(--foreground-muted)] hidden md:block">
-                                    Kore.AI Guardrail Testing
+                                <div className="text-xs font-mono bg-gray-50 dark:bg-gray-900 border border-gray-200 dark:border-gray-700 px-3 py-1.5 rounded-md text-gray-500 hidden md:block">
+                                    {botConfig?.botId ? `Bot: ${botConfig.botId}` : 'Select a Bot to Begin'}
                                 </div>
                                 <ThemeSwitcher />
                             </div>
@@ -306,9 +306,6 @@ export default function Home() {
                         {/* Evaluator View */}
                         <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
                             <header className="mb-10 text-center max-w-4xl mx-auto py-8">
-                                <div className="text-xs font-bold tracking-[0.25em] text-red-600 dark:text-red-500 uppercase mb-4">
-                                    AI Safety Verification Platform
-                                </div>
                                 <h1 className="text-4xl md:text-5xl font-bold text-[var(--foreground)] mb-6 tracking-tight leading-tight">
                                     Test, verify, and harden your bot's{' '}
                                     <span className="text-red-600 dark:text-red-500 relative inline-block">
