@@ -99,6 +99,9 @@ jobs:
               redguard_data:
             EOF
             
+            # Prune old images to free up space
+            sudo docker system prune -af
+
             # Pull latest images and restart (using sudo)
             sudo docker compose -f docker-compose.prod.yml pull
             sudo docker compose -f docker-compose.prod.yml up -d
