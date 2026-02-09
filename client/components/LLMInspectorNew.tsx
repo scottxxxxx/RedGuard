@@ -205,37 +205,62 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                     <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
                         <tr>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Feature</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Description</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Activity</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
                         </tr>
                     </thead>
                     <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
-                        {logs.map((log: any, i: number) => (
-                            <tr
-                                key={i}
-                                onClick={() => setSelectedLog(log)}
-                                className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
-                            >
-                                <td className="px-3 py-2 text-sm text-gray-900 dark:text-white whitespace-nowrap">
-                                    {log['start Date'] ? new Date(log['start Date']).toLocaleTimeString() : '-'}
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">
-                                    <span className={`px-2 py-0.5 rounded text-xs font-medium ${(log['Feature Name '] || log.Feature || '').includes('Guardrail')
-                                        ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                                        : 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300'
-                                        }`}>
-                                        {log['Feature Name '] || log.Feature || '-'}
-                                    </span>
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 max-w-[300px] truncate" title={log.Description}>
-                                    {log.Description || '-'}
-                                </td>
-                                <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400">
-                                    {log['Model Name'] || log.Model || '-'}
-                                </td>
-                            </tr>
-                        ))}
+                        {logs.map((log: any, i: number) => {
+                            const rawFeature = log['Feature Name '] || log.Feature || '';
+                            const isGuardrail = rawFeature.toLowerCase().includes('guardrail');
+                            const isInput = rawFeature.toLowerCase().includes('input');
+                            const isOutput = rawFeature.toLowerCase().includes('output');
+
+                            // Determine Category (The Badge)
+                            let category = isGuardrail
+                                ? (isInput ? 'Guardrail (In)' : isOutput ? 'Guardrail (Out)' : 'Guardrail')
+                                : 'GenAI Node';
+
+                            // Determine Activity Name (The "Normalized" Description)
+                            // If it's a guardrail, the description usually contains the node name it's guarding.
+                            // If it's not a guardrail, the feature name itself is usually the node type.
+                            let activityName = isGuardrail ? (log.Description || rawFeature) : (rawFeature || log.Description || '-');
+
+                            // Clean up redundant prefixes
+                            activityName = activityName
+                                .replace(/^Guardrails - /i, '')
+                                .replace(/^Guardrails- /i, '')
+                                .replace(/^Guardrail - /i, '');
+
+                            const model = log['Model Name'] || log.Model || '-';
+
+                            return (
+                                <tr
+                                    key={i}
+                                    onClick={() => setSelectedLog(log)}
+                                    className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                                >
+                                    <td className="px-3 py-2 text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                                        {log['start Date'] ? new Date(log['start Date']).toLocaleTimeString() : '-'}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">
+                                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isGuardrail
+                                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
+                                            : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                            }`}>
+                                            {category}
+                                        </span>
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[3000px] font-medium" title={log.Description}>
+                                        {activityName}
+                                    </td>
+                                    <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 font-mono text-[11px]">
+                                        {model}
+                                    </td>
+                                </tr>
+                            );
+                        })}
                     </tbody>
                 </table>
                 {logs.length === 0 && !isLoading && !error && (
@@ -282,8 +307,14 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
 
                             <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
                                 <div className="col-span-2 md:col-span-3">
-                                    <span className="block text-xs text-gray-500 uppercase">Description</span>
-                                    <span className="font-medium text-lg">{selectedLog.Description || '-'}</span>
+                                    <span className="block text-xs text-gray-500 uppercase">Activity</span>
+                                    <span className="font-medium text-lg">
+                                        {(selectedLog.Description || selectedLog['Feature Name '] || selectedLog.Feature || '-')
+                                            .replace(/^Guardrails - /i, '')
+                                            .replace(/^Guardrails- /i, '')
+                                            .replace(/^Guardrail - /i, '')
+                                        }
+                                    </span>
                                 </div>
                                 <div><span className="block text-xs text-gray-500 uppercase">Feature</span> <span className="font-medium">{selectedLog['Feature Name '] || selectedLog.Feature}</span></div>
                                 <div><span className="block text-xs text-gray-500 uppercase">Status</span> <span className="font-medium text-green-600">{selectedLog.Status || 'Success'}</span></div>
