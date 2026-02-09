@@ -72,8 +72,8 @@ router.post('/connect', async (req, res) => {
     const startTime = Date.now();
 
     try {
-        // Send a blank message to trigger 'On Connect' or 'Welcome' intent in Kore
-        const kResponse = await koreService.sendMessage(explicitUserId, { type: "text", val: "" }, { new: true }, botConfig);
+        // Send the explicit ON_CONNECT event as per Kore.ai Webhook V2.0 spec
+        const kResponse = await koreService.sendMessage(explicitUserId, { type: "event", val: "ON_CONNECT" }, { new: true }, botConfig);
 
         await apiLogger.log({
             logType: 'kore_connect',

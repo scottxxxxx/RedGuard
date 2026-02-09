@@ -15,10 +15,11 @@ interface Props {
     onConfigChange: (config: BotConfig) => void;
     onBotNameUpdate?: (name: string | null) => void;
     onConnect?: (botGreeting: string) => void;
+    onSessionReset?: () => void;
     userId?: string;
 }
 
-export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect, userId }: Props) {
+export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect, onSessionReset, userId }: Props) {
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
         clientId: '***REMOVED_KORE_CLIENT_ID***',
@@ -82,8 +83,6 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 if (onBotNameUpdate) onBotNameUpdate(null);
             }
 
-            // After validation, try to "connect" to get greeting if needed
-            initializeChat(currentConfig);
         } catch (err: any) {
             setValidationStatus('error');
             setValidationMessage(err.message);
@@ -111,6 +110,13 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
         }
     }, [onBotNameUpdate]);
 
+    // Trigger greeting when userId changes (e.g. on session reset)
+    useEffect(() => {
+        if (userId && config.botId && config.clientId && config.clientSecret) {
+            initializeChat(config);
+        }
+    }, [userId]);
+
     // Save to localStorage when config changes
     useEffect(() => {
         localStorage.setItem('redguard_bot_config', JSON.stringify(config));
@@ -135,29 +141,6 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                         Bot Configuration
                     </h3>
                 </div>
-                {isValidating ? (
-                    <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-gray-50 dark:bg-gray-800 text-gray-400 rounded border border-gray-100 dark:border-gray-700">
-                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                        </svg>
-                        Connecting...
-                    </div>
-                ) : validationStatus === 'success' ? (
-                    <div className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400 rounded border border-emerald-200 dark:border-emerald-800">
-                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                        Active
-                    </div>
-                ) : validationStatus === 'error' ? (
-                    <button
-                        onClick={() => validateConnection(config)}
-                        className="flex items-center gap-1.5 px-2 py-1 text-[10px] font-bold uppercase tracking-wider bg-red-50 dark:bg-red-900/20 text-red-600 dark:text-red-400 rounded border border-red-200 dark:border-red-800 hover:bg-red-100 transition-colors"
-                    >
-                        Retry Connection
-                    </button>
-                ) : null}
             </div>
 
             {validationMessage && (
@@ -235,6 +218,18 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                         className="input w-full text-sm font-mono text-[var(--foreground)]"
                     />
                 </div>
+            </div>
+
+            <div className="mt-5 pt-4 border-t border-[var(--border)]">
+                <button
+                    onClick={onSessionReset}
+                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--foreground)] border border-[var(--border)] rounded-lg transition-all hover:shadow-sm"
+                >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                    Reset Bot Connection
+                </button>
             </div>
         </div>
     );
