@@ -1,0 +1,30 @@
+{
+    "synonyms": {
+        "competitors": [
+            "comp1",
+            "comp2"
+        ]
+    },
+    "guardrailsList": [
+        {
+            "name": "Toxicity Filter",
+            "description": "Standard Toxicity Filter: Blocks hate speech, harassment, and explicit content.",
+            "enabled": true
+        },
+        {
+            "name": "Restricted Topics",
+            "description": "Custom Topic Filter: Prevents the bot from discussing competitors or sensitive subjects.",
+            "enabled": true
+        },
+        {
+            "name": "Prompt Injection Detection",
+            "description": "Security Guardrail: Analyzes input for jailbreak attempts using heuristic patterns.",
+            "enabled": true
+        },
+        {
+            "name": "Regex Pattern Matcher",
+            "description": "Compliance Check: Blocks responses containing SSNs or other PII patterns.",
+            "enabled": true
+        }
+    ]
+}

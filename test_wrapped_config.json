@@ -1,0 +1,16 @@
+{
+    "appDefinition": {
+        "synonyms": {
+            "wrapped_competitor": [
+                "comp1"
+            ]
+        },
+        "guardrailsList": [
+            {
+                "name": "Wrapped Toxicity",
+                "description": "Wrapped Description",
+                "enabled": true
+            }
+        ]
+    }
+}

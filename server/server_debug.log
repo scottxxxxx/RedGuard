@@ -1,0 +1,18 @@
+[2026-02-09T05:16:14.737Z] Analysis Error: (f.featureApplyAt || "").toLowerCase is not a function
+Stack: TypeError: (f.featureApplyAt || "").toLowerCase is not a function
+    at /Users/scottguida/RedGuard/server/src/services/bot-config-analyzer.js:90:62
+    at Array.forEach (<anonymous>)
+    at /Users/scottguida/RedGuard/server/src/services/bot-config-analyzer.js:87:29
+    at Array.forEach (<anonymous>)
+    at BotConfigAnalyzer.analyze (/Users/scottguida/RedGuard/server/src/services/bot-config-analyzer.js:67:24)
+    at /Users/scottguida/RedGuard/server/src/routes/evaluate.js:62:44
+    at Layer.handleRequest (/Users/scottguida/RedGuard/server/node_modules/router/lib/layer.js:152:17)
+    at next (/Users/scottguida/RedGuard/server/node_modules/router/lib/route.js:157:13)
+    at Route.dispatch (/Users/scottguida/RedGuard/server/node_modules/router/lib/route.js:117:3)
+    at handle (/Users/scottguida/RedGuard/server/node_modules/router/index.js:435:11)
+Config Keys: _id, refId, notifyUserViaEmail, purpose, hasUserEndpoint, offKoraConfirmation, skipMakeEditLinks, type, variables, showInMp, defaultLanguage, supportedLanguages, languagePreferences, strict_pii, pii_patterns, languageConfigurations, channels, vNameSpace, krVNameSpace, evVNameSpace, color, sBannerColor, enableInputTranslation, multiLingualConfigurations, isSmartAssist, isAgentAssist, appType, isSmartassistMigrated, isFromBT, isDeflect, isLinkedSmartAssist, bBannerColor, categoryIds, class, featured, sendVcf, isNLEnabled, interruptsEnabled, externalNluAdapters, sessionInactiveTime, sessionClosureProcess, skipSessionMessage, clearAllAuthTokens, runCustomScript, languagesToBeIgnored, localeData, interruptOptions, detectMultiIntent, assignAllChildBots, recentBotLimit, isCsMatchEnabled, defaultDialogId, enableAutoUtteranceAddition, amendConfig, botSentimentEvents, enableNegativePatterns, advancedNLSettings, translationEngines, llmConfiguration, promptLibraries, dialogGPTSettings, preBuiltIntegrations, answers, botEvents, idpConfigurations, actions, alerts, patterns, dialogComponents, tools, experienceFlows, dialogs, scenes, sceneComponents, widgetThemes, knowledgeTasks, smallTalk, widgets, panels, forms, unexportedTasks, smartAssistBot, smartAssistThemes, smartAssistTasks, customDashboards, paramMaps, taskDgParamMaps, sentences, koraResponses, customTemplates, mlParams, contentVariables, namespaces, exportOptions, agentAssistExport, feedbackSurveys, environmentVersionInfo, traits, latestEncryptedHash, encryptedHash
+
+[Analyze] Feature Sample: {"id":"taxonomy_classification","featureApplyAt":{"llm_req":true,"llm_res":true}}
+[Analyze] Feature Sample: {"id":"taxonomy_classification","featureApplyAt":{"llm_req":true,"llm_res":true}}
+[Analyze] Feature Sample: {"id":"taxonomy_classification","featureApplyAt":{"llm_req":true,"llm_res":true}}
+[Analyze] Feature Sample: {"id":"taxonomy_classification","featureApplyAt":{"llm_req":true,"llm_res":true}}

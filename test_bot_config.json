@@ -1,0 +1,41 @@
+{
+    "_id": "test-bot-id",
+    "name": "Test Bot",
+    "ivrSettings": {
+        "timeoutPrompts": [
+            [
+                {
+                    "type": "text",
+                    "value": "I apologize, I cannot discuss weapons or dangerous items."
+                }
+            ]
+        ]
+    },
+    "synonyms": {
+        "create": [
+            "make",
+            "build"
+        ],
+        "dangerous_items": [
+            "guns",
+            "weapons",
+            "explosives"
+        ]
+    },
+    "dialogs": [
+        {
+            "nodes": [
+                {
+                    "id": "node1",
+                    "type": "message",
+                    "text": "Welcome to the bot."
+                },
+                {
+                    "id": "node2",
+                    "type": "message",
+                    "text": "We have a strict policy against weapons."
+                }
+            ]
+        }
+    ]
+}

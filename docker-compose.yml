@@ -1,0 +1,36 @@
+version: '3.8'
+
+services:
+  server:
+    build: ./server
+    ports:
+      - "3001:3001"
+    volumes:
+      # Mount the .env file so keys are available
+      - ./server/.env:/app/.env
+      # Mount source code
+      - ./server:/app
+      - /app/node_modules
+    environment:
+      - DATABASE_URL=file:./dev.db
+      - PORT=3001
+    command: npm run dev
+
+  client:
+    build: ./client
+    ports:
+      - "3000:3000"
+    command: npm run dev
+    volumes:
+      - ./client:/app
+      - /app/node_modules
+    environment:
+      # In Docker, localhost refers to the container itself. 
+      # The browser (client) runs outside, so localhost:3001 works for browser calls.
+      # But for server-side calls (SSR), we might need the service name.
+      - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+    depends_on:
+      - server
+
+volumes:
+  sqlite_data:

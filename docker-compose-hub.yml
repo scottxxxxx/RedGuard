@@ -1,0 +1,28 @@
+version: '3.8'
+
+services:
+  server:
+    # REPLACE 'YOUR_DOCKERHUB_USERNAME' with your actual Docker Hub username!
+    image: YOUR_DOCKERHUB_USERNAME/redguard-server:latest
+    ports:
+      - "3001:3001"
+    volumes:
+      - sqlite_data:/app/prisma
+      # You still need to provide the .env file locally!
+      - ./server/.env:/app/.env
+    environment:
+      - DATABASE_URL=file:./dev.db
+      - PORT=3001
+
+  client:
+    # REPLACE 'YOUR_DOCKERHUB_USERNAME' with your actual Docker Hub username!
+    image: YOUR_DOCKERHUB_USERNAME/redguard-client:latest
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:3001/api
+    depends_on:
+      - server
+
+volumes:
+  sqlite_data:

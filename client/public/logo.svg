@@ -1,0 +1,35 @@
+<svg width="200" height="200" viewBox="0 0 200 200" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="shieldGrad" x1="100" y1="20" x2="100" y2="190" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#D32F2F" />
+      <stop offset="100%" stop-color="#8E0000" />
+    </linearGradient>
+    <linearGradient id="metalGrad" x1="50" y1="50" x2="150" y2="150" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#E0E0E0" />
+      <stop offset="50%" stop-color="#9E9E9E" />
+      <stop offset="100%" stop-color="#616161" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Shield Body -->
+  <path d="M100 20 C 160 20, 180 50, 180 90 C 180 140, 140 170, 100 190 C 60 170, 20 140, 20 90 C 20 50, 40 20, 100 20 Z" 
+        fill="url(#shieldGrad)" stroke="#B71C1C" stroke-width="2" />
+        
+  <!-- Inner Border / Highlight -->
+  <path d="M100 28 C 152 28, 170 54, 170 90 C 170 134, 136 161, 100 180 C 64 161, 30 134, 30 90 C 30 54, 48 28, 100 28 Z" 
+        fill="none" stroke="rgba(255,255,255,0.3)" stroke-width="2" />
+
+  <!-- Lock / G Motif -->
+  <!-- Shackle -->
+  <path d="M70 90 V 70 A 30 30 0 0 1 130 70 V 90" 
+        stroke="url(#metalGrad)" stroke-width="12" stroke-linecap="round" fill="none" />
+        
+  <!-- Lock Body forming a 'G' shape -->
+  <!-- Extended bottom line to H 136 (matching top width) then up and in -->
+  <path d="M136 90 H 64 V 140 H 136 V 115 H 100" 
+        stroke="white" stroke-width="12" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+        
+  <path d="M136 90 H 64 V 140 H 136 V 115 H 100" 
+        stroke="url(#metalGrad)" stroke-width="8" stroke-linecap="round" stroke-linejoin="round" fill="none" />
+
+</svg>
