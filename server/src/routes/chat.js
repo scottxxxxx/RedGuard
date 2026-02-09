@@ -66,4 +66,35 @@ router.post('/send', async (req, res) => {
     }
 });
 
+router.post('/connect', async (req, res) => {
+    const { userId, botConfig } = req.body;
+    const explicitUserId = userId || "test_user_dashboard";
+    const startTime = Date.now();
+
+    try {
+        // Send a blank message to trigger 'On Connect' or 'Welcome' intent in Kore
+        const kResponse = await koreService.sendMessage(explicitUserId, { type: "text", val: "" }, { new: true }, botConfig);
+
+        await apiLogger.log({
+            logType: 'kore_connect',
+            method: 'POST',
+            endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
+            requestBody: { userId: explicitUserId, action: "initial_connect" },
+            statusCode: 200,
+            responseBody: kResponse,
+            latencyMs: Date.now() - startTime,
+            isError: false,
+            provider: 'kore'
+        });
+
+        res.json(kResponse);
+    } catch (error) {
+        console.error("Connect Error:", error.message);
+        res.status(500).json({
+            error: "Failed to connect to bot",
+            details: error.response ? error.response.data : error.message
+        });
+    }
+});
+
 module.exports = router;
