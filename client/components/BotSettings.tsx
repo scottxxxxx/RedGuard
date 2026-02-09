@@ -38,7 +38,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
     const initializeChat = async (currentConfig: BotConfig) => {
         try {
             const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
-            await fetch(apiUrl, {
+            const res = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -47,8 +47,19 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 })
             });
 
-            // Greet message will be handled by handleBotConnect in the parent via polling or socket if implemented
-            // For now, it's just triggered here.
+            const data = await res.json();
+
+            // Look for bot name in the connection response (metadata)
+            // Some versions of Webhook V2 include botName or botInfo in the root or session object
+            const foundName = data.botName || data.botInfo?.name || data.meta?.botName;
+
+            if (foundName && onBotNameUpdate) {
+                onBotNameUpdate(foundName);
+            }
+
+            if (res.ok && data.data?.[0]?.val && onConnect) {
+                onConnect(data.data[0].val);
+            }
         } catch (err) {
             console.warn("Failed to get initial bot greeting:", err);
         }
