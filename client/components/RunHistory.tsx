@@ -122,8 +122,9 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
 
     const fetchRuns = async () => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch('http://localhost:3001/api/runs');
+            const res = await fetch(`${apiUrl}/runs`);
             if (res.ok) {
                 const data = await res.json();
                 setRuns(data);
@@ -141,8 +142,9 @@ export default function RunHistory({ botId }: RunHistoryProps) {
 
     const clearAllRuns = async () => {
         if (!confirm('Are you sure you want to clear all run history?')) return;
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            await fetch('http://localhost:3001/api/runs', { method: 'DELETE' });
+            await fetch(`${apiUrl}/runs`, { method: 'DELETE' });
             setRuns([]);
         } catch (error) {
             console.error('Failed to clear runs:', error);

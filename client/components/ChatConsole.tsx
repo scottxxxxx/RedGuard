@@ -54,8 +54,9 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
     const generateAttack = async (type: string) => {
         setLoading(true);
         setShowAttackMenu(false);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch(`http://localhost:3001/api/garak/prompt?category=${type}`);
+            const res = await fetch(`${apiUrl}/garak/prompt?category=${type}`);
             if (!res.ok) throw new Error('Failed to fetch prompt');
             const data = await res.json();
             if (data.prompt) {
@@ -84,8 +85,9 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
         setInput('');
         setLoading(true);
 
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch('http://localhost:3001/api/chat/send', {
+            const res = await fetch(`${apiUrl}/chat/send`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

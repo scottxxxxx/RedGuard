@@ -99,8 +99,9 @@ export default function Home() {
         // Show preview as long as we have a config (uses placeholders for empty interaction)
 
         const fetchPreview = async () => {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
             try {
-                const res = await fetch('http://localhost:3001/api/evaluate/preview', {
+                const res = await fetch(`${apiUrl}/evaluate/preview`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -135,8 +136,9 @@ export default function Home() {
     const handleEvaluate = async () => {
         if (!interaction || !fullGuardrailConfig) return;
         setIsEvaluating(true);
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch('http://localhost:3001/api/evaluate', {
+            const res = await fetch(`${apiUrl}/evaluate`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
@@ -170,7 +172,8 @@ export default function Home() {
                     return found.pass === 'N/A' ? null : found.pass;
                 };
 
-                await fetch('http://localhost:3001/api/runs', {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+                await fetch(`${apiUrl}/runs`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -199,7 +202,8 @@ export default function Home() {
 
     const handleRequestPayloadRegen = async (prompt: string): Promise<string> => {
         if (!interaction || !fullGuardrailConfig) throw new Error("No interaction");
-        const res = await fetch('http://localhost:3001/api/evaluate/preview', {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const res = await fetch(`${apiUrl}/evaluate/preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({

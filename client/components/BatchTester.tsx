@@ -58,10 +58,11 @@ export default function BatchTester({ botConfig, guardrailConfig }: Props) {
             let history: { role: string, text: string }[] = [];
 
             for (const utterance of utterances) {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
                 // 1. Send Message
                 let botResponseText = "";
                 try {
-                    const chatRes = await fetch('http://localhost:3001/api/chat/send', {
+                    const chatRes = await fetch(`${apiUrl}/chat/send`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ message: utterance, botConfig })
@@ -84,7 +85,7 @@ export default function BatchTester({ botConfig, guardrailConfig }: Props) {
                 let debugPrompt = "";
 
                 try {
-                    const evalRes = await fetch('http://localhost:3001/api/evaluate', {
+                    const evalRes = await fetch(`${apiUrl}/evaluate`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({

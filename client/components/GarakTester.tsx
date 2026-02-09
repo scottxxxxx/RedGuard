@@ -19,8 +19,9 @@ export default function GarakTester({ botId }: GarakTesterProps) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         // Fetch available probes
-        fetch('http://localhost:3001/api/garak/probes')
+        fetch(`${apiUrl}/garak/probes`)
             .then(res => res.json())
             .then(data => setProbes(data))
             .catch(err => console.error("Failed to fetch probes", err));
@@ -43,8 +44,9 @@ export default function GarakTester({ botId }: GarakTesterProps) {
         setIsRunning(true);
         setLogs(prev => [...prev, `Initializing Garak scan for '${probes[selectedProbe].label}'...`]);
 
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const response = await fetch('http://localhost:3001/api/garak/scan', {
+            const response = await fetch(`${apiUrl}/garak/scan`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({

@@ -11,6 +11,7 @@ env:
   GAR_LOCATION: us-central1
   SERVICE: redguard-server
   REGION: us-central1
+  API_URL: http://***REMOVED_IP***:3001/api
 
 jobs:
   deploy:
@@ -52,6 +53,8 @@ jobs:
           context: ./client
           push: true
           tags: ghcr.io/${{ env.REPO_LC }}/client:latest
+          build-args: |
+            NEXT_PUBLIC_API_URL=${{ env.API_URL }}
 
       # ------------------------------------------------------------------
       # 3. Deploy to GCP Compute Engine via SSH
@@ -89,7 +92,7 @@ jobs:
                   - "3000:3000"
                 environment:
                   - NODE_ENV=production
-                  - NEXT_PUBLIC_API_URL=/api
+                  - NEXT_PUBLIC_API_URL=${{ env.API_URL }}
                 depends_on:
                   - server
             
