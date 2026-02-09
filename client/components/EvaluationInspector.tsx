@@ -139,9 +139,10 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
         }
 
         const resultData = result.result || result;
-        const pass = result.pass;
+        const overallStatus = resultData.bot_response_evaluation?.overall?.status || resultData.overall?.status;
 
-        if (pass) {
+        // Passed Cleanly
+        if (overallStatus === 'pass' || result.pass === true) {
             return {
                 type: 'pass' as const,
                 message: 'Passed All Guardrails',
@@ -149,10 +150,29 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
             };
         }
 
+        // Passed with Warnings (e.g. not_detected)
+        if (overallStatus === 'pass_with_warnings') {
+            const warningDetails: string[] = [];
+            const evalData = resultData.bot_response_evaluation || resultData;
+            ['toxicity', 'topics', 'injection', 'regex'].forEach(key => {
+                const item = evalData[key];
+                if (item && item.status === 'not_detected') {
+                    warningDetails.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: Not Detected (Scanner missing in logs)`);
+                }
+            });
+
+            return {
+                type: 'warning' as const,
+                message: 'Passed with Warnings',
+                details: warningDetails.length > 0 ? warningDetails.join('; ') : (resultData.bot_response_evaluation?.overall?.comment || 'Guardrails passed but configuration issues detected.')
+            };
+        }
+
+        // Failures
         const failedChecks: string[] = [];
         if (Array.isArray(resultData.results)) {
             resultData.results.forEach((r: any) => {
-                if (r.pass === false) { // Explicitly false, not 'N/A' or true
+                if (r.pass === false) { // Explicitly false
                     failedChecks.push(`${r.guardrail}: ${r.reason}`);
                 }
             });
@@ -160,8 +180,13 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
             const evalData = resultData.bot_response_evaluation || resultData;
             ['toxicity', 'topics', 'injection', 'regex'].forEach(key => {
                 const item = evalData[key];
-                if (item && (item.status === 'fail' || item.pass === false)) {
-                    failedChecks.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: ${item.reason}`);
+                if (item) {
+                    if (item.status === 'fail' || item.pass === false) {
+                        failedChecks.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: ${item.reason}`);
+                    } else if (item.status === 'not_detected') {
+                        // Treat not_detected as a failure if it wasn't caught by pass_with_warnings (fallback)
+                        failedChecks.push(`${key.charAt(0).toUpperCase() + key.slice(1)}: Not Detected`);
+                    }
                 }
             });
         }
@@ -183,24 +208,29 @@ export default function EvaluationInspector({ prompt, rawResponse, result, hyper
         <div className="bg-white dark:bg-gray-800 shadow rounded-lg flex flex-col h-[600px]">
             {verdictInfo && (
                 <div className={`p-4 border-b ${verdictInfo.type === 'pass' ? 'bg-green-50 border-green-200' :
-                    verdictInfo.type === 'error' ? 'bg-yellow-50 border-yellow-200' :
-                        'bg-red-50 border-red-200'
+                    verdictInfo.type === 'warning' ? 'bg-orange-50 border-orange-200' :
+                        verdictInfo.type === 'error' ? 'bg-yellow-50 border-yellow-200' :
+                            'bg-red-50 border-red-200'
                     }`}>
                     <div className="flex items-center gap-2">
                         <span className="text-xl">
-                            {verdictInfo.type === 'pass' ? '✅' : verdictInfo.type === 'error' ? '⚠️' : '❌'}
+                            {verdictInfo.type === 'pass' ? '✅' :
+                                verdictInfo.type === 'warning' ? '⚠️' :
+                                    verdictInfo.type === 'error' ? '⚠️' : '❌'}
                         </span>
                         <span className={`font-bold ${verdictInfo.type === 'pass' ? 'text-green-800' :
-                            verdictInfo.type === 'error' ? 'text-yellow-800' :
-                                'text-red-800'
+                            verdictInfo.type === 'warning' ? 'text-orange-800' :
+                                verdictInfo.type === 'error' ? 'text-yellow-800' :
+                                    'text-red-800'
                             }`}>
                             {verdictInfo.message}
                         </span>
                     </div>
                     {verdictInfo.details && (
                         <p className={`mt-2 text-sm ${verdictInfo.type === 'pass' ? 'text-green-700' :
-                            verdictInfo.type === 'error' ? 'text-yellow-700' :
-                                'text-red-700'
+                            verdictInfo.type === 'warning' ? 'text-orange-700' :
+                                verdictInfo.type === 'error' ? 'text-yellow-700' :
+                                    'text-red-700'
                             }`}>
                             {verdictInfo.details}
                         </p>

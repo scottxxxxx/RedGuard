@@ -81,8 +81,9 @@ export default function BotConfigAnalyzer() {
         setMatches(results);
 
         // 2. Server-side Extraction
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const response = await fetch('http://localhost:3001/api/evaluate/analyze-config', {
+            const response = await fetch(`${apiUrl}/evaluate/analyze-config`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',

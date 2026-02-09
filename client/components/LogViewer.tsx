@@ -43,6 +43,7 @@ export default function LogViewer() {
     }, [filter]);
 
     const fetchLogs = async () => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
             const params = new URLSearchParams();
             if (filter.logType) params.append('logType', filter.logType);
@@ -50,7 +51,7 @@ export default function LogViewer() {
             if (filter.provider) params.append('provider', filter.provider);
             params.append('limit', '50');
 
-            const res = await fetch(`http://localhost:3001/api/logs?${params}`);
+            const res = await fetch(`${apiUrl}/logs?${params}`);
             const data = await res.json();
             setLogs(data.logs || []);
         } catch (error) {
@@ -61,8 +62,9 @@ export default function LogViewer() {
     };
 
     const fetchStats = async () => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch('http://localhost:3001/api/logs/stats');
+            const res = await fetch(`${apiUrl}/logs/stats`);
             const data = await res.json();
             setStats(data);
         } catch (error) {
@@ -71,11 +73,12 @@ export default function LogViewer() {
     };
 
     const exportLogs = () => {
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         const params = new URLSearchParams();
         if (filter.logType) params.append('logType', filter.logType);
         if (filter.isError) params.append('isError', filter.isError);
         if (filter.provider) params.append('provider', filter.provider);
-        window.open(`http://localhost:3001/api/logs/export?${params}`, '_blank');
+        window.open(`${apiUrl}/logs/export?${params}`, '_blank');
     };
 
     const formatTimestamp = (ts: string) => {

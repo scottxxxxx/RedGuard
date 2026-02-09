@@ -129,7 +129,8 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
                             reader.onload = async (ev) => {
                                 try {
                                     const content = JSON.parse(ev.target?.result as string);
-                                    const res = await fetch('http://localhost:3001/api/evaluate/analyze-config', {
+                                    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+                                    const res = await fetch(`${apiUrl}/evaluate/analyze-config`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ botConfig: content })
