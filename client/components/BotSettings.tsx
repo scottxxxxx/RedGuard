@@ -220,14 +220,9 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
 
             <div className="mt-5 pt-4 border-t border-[var(--border)]">
                 <button
-                    onClick={async () => {
-                        setIsValidating(true);
-                        try {
-                            if (onSessionReset) onSessionReset();
-                            await validateConnection(config);
-                        } finally {
-                            setIsValidating(false);
-                        }
+                    onClick={() => {
+                        if (onSessionReset) onSessionReset();
+                        validateConnection(config);
                     }}
                     disabled={isValidating}
                     className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-lg transition-all hover:shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
