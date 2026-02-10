@@ -395,7 +395,11 @@ export default function Home() {
                                         </div>
                                         <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                             <div className="col-span-4 h-full min-h-0">
-                                                <GuardrailSettings onConfigChange={setGuardrailPolicy} />
+                                                <GuardrailSettings
+                                                    onConfigChange={setGuardrailPolicy}
+                                                    onBotNameUpdate={setBotName}
+                                                    onBotConfigUpdate={setBotConfig}
+                                                />
                                             </div>
                                             <div className="col-span-8 h-full min-h-0">
                                                 <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} />

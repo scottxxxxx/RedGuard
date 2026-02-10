@@ -10,6 +10,8 @@ export type GuardrailPolicy = {
 
 interface Props {
     onConfigChange: (config: GuardrailPolicy) => void;
+    onBotNameUpdate?: (name: string | null) => void;
+    onBotConfigUpdate?: (config: any) => void;
 }
 
 const FeatureInfoButton = ({ text, features }: { text?: string, features?: string[] }) => {
@@ -64,7 +66,7 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
     );
 };
 
-export default function GuardrailSettings({ onConfigChange }: Props) {
+export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onBotConfigUpdate }: Props) {
     const [toggles, setToggles] = useState({
         toxicity_input: true,
         toxicity_output: true,
@@ -129,6 +131,29 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
                             reader.onload = async (ev) => {
                                 try {
                                     const content = JSON.parse(ev.target?.result as string);
+
+                                    // 1. Instantly update Bot Identity if found
+                                    const botName = content.name || content.botName;
+                                    const botId = content.botId || content._id || content.id;
+
+                                    if (botName && onBotNameUpdate) {
+                                        onBotNameUpdate(botName);
+                                    }
+                                    if (botId && onBotConfigUpdate) {
+                                        onBotConfigUpdate((prev: any) => ({ ...prev, botId }));
+                                    }
+
+                                    // 2. Clear old state before applying new analysis
+                                    const newToggles = {
+                                        toxicity_input: false,
+                                        toxicity_output: false,
+                                        topics_input: false,
+                                        topics_output: false,
+                                        injection: false,
+                                        regex: false
+                                    };
+
+                                    // 3. Request logic analysis from backend
                                     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
                                     const res = await fetch(`${apiUrl}/evaluate/analyze-config`, {
                                         method: 'POST',
@@ -138,43 +163,30 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
 
                                     if (res.ok) {
                                         const data = await res.json();
-                                        console.log("Import response:", data);
+                                        console.log("Analysis Result:", data);
 
-                                        // Update Descriptions and Details
+                                        // Update Descriptions and Feature Details
                                         if (data.descriptions) setDescriptions(data.descriptions);
                                         if (data.featureDetails) setFeatureDetails(data.featureDetails);
 
-                                        // Reset all toggles to false
-                                        const newToggles = {
-                                            toxicity_input: false,
-                                            toxicity_output: false,
-                                            topics_input: false,
-                                            topics_output: false,
-                                            injection: false,
-                                            regex: false
-                                        };
-
-                                        // Enable based on returned granular keys (e.g., toxicity_input)
+                                        // Map enabled guardrails to toggles
                                         if (data.enabledGuardrails && Array.isArray(data.enabledGuardrails)) {
                                             data.enabledGuardrails.forEach((key: string) => {
-                                                // Map keys to toggles
-                                                if (key.startsWith('toxicity')) {
+                                                if (key.includes('toxicity')) {
                                                     if (key.includes('input')) newToggles.toxicity_input = true;
                                                     if (key.includes('output')) newToggles.toxicity_output = true;
-                                                } else if (key.startsWith('topics')) {
+                                                } else if (key.includes('topics')) {
                                                     if (key.includes('input')) newToggles.topics_input = true;
                                                     if (key.includes('output')) newToggles.topics_output = true;
-                                                } else if (key.startsWith('injection')) {
+                                                } else if (key.includes('injection')) {
                                                     newToggles.injection = true;
-                                                } else if (key.startsWith('regex')) {
+                                                } else if (key.includes('regex')) {
                                                     newToggles.regex = true;
-                                                } else if (key in newToggles) {
-                                                    (newToggles as any)[key] = true;
                                                 }
                                             });
                                         }
 
-                                        // Populate Data Fields
+                                        // Apply data fields
                                         if (data.topics && data.topics.length > 0) {
                                             setBannedTopics(data.topics.join(', '));
                                         }
@@ -182,14 +194,10 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
                                             setRegexPatterns(data.regexPatterns.join('\n'));
                                         }
 
-                                        // Apply toggle state
+                                        // Force UI refresh with new toggles
                                         setToggles(newToggles);
-
-                                        console.log("Configuration imported successfully.");
                                     } else {
-                                        const errorData = await res.json().catch(() => ({}));
-                                        console.error("Failed to analyze config", errorData);
-                                        alert(`Failed to analyze configuration file. ${errorData.error || ''} ${errorData.details || ''}`);
+                                        console.error("Failed to analyze config file");
                                     }
                                 } catch (err) {
                                     console.error("Error reading file", err);
@@ -264,9 +272,14 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
 
                 {/* Injection */}
                 <div className="border-t border-[var(--border)] pt-3">
-                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors">
-                        <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => handleToggle('injection')}>
-                            <input type="checkbox" checked={toggles.injection} onChange={() => { }} className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)]" />
+                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors cursor-pointer" onClick={() => handleToggle('injection')}>
+                        <div className="flex items-center gap-3 flex-1">
+                            <input
+                                type="checkbox"
+                                checked={toggles.injection}
+                                readOnly
+                                className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)] pointer-events-none"
+                            />
                             <span className="text-sm text-[var(--foreground)]">Detect Prompt Injections (Input Only)</span>
                         </div>
                         <FeatureInfoButton text={descriptions['injection']} features={featureDetails['injection']} />
@@ -275,9 +288,14 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
 
                 {/* Regex */}
                 <div className="border-t border-[var(--border)] pt-3">
-                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors">
-                        <div className="flex items-center gap-3 cursor-pointer flex-1" onClick={() => handleToggle('regex')}>
-                            <input type="checkbox" checked={toggles.regex} onChange={() => { }} className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)]" />
+                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors cursor-pointer" onClick={() => handleToggle('regex')}>
+                        <div className="flex items-center gap-3 flex-1">
+                            <input
+                                type="checkbox"
+                                checked={toggles.regex}
+                                readOnly
+                                className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)] pointer-events-none"
+                            />
                             <span className="text-sm text-[var(--foreground)]">Filter Responses (Regex) (Output Only)</span>
                         </div>
                         <FeatureInfoButton text={descriptions['regex']} features={featureDetails['regex']} />
@@ -290,7 +308,7 @@ export default function GuardrailSettings({ onConfigChange }: Props) {
                                 onChange={(e) => setRegexPatterns(e.target.value)}
                                 className="input w-full text-sm font-mono text-[var(--foreground)]"
                                 rows={2}
-                                placeholder=""
+                                placeholder="Enter regex patterns (one per line)..."
                             />
                         </div>
                     )}
