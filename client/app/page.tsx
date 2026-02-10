@@ -92,9 +92,6 @@ function HomeContent() {
     };
 
     const handleSessionReset = () => {
-        // Use RedGuard- prefix so we can easily identify our interactions in Kore GenAI logs
-        const sessionId = Math.random().toString(36).substring(2, 10);
-        setUserId(`RedGuard-${sessionId}`);
         setKoreSessionId(null);  // Reset Kore session ID
         llmInspectorRef.current?.clearLogs();  // Clear the logs display
         setMessages([]);
