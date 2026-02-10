@@ -46,7 +46,6 @@ function HomeContent() {
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [runHistoryKey, setRunHistoryKey] = useState(0); // Force refresh of run history
     const [hyperparams, setHyperparams] = useState({ temperature: 0.0, max_tokens: 4096, top_p: 1.0 });
-    const [userId, setUserId] = useState('');
     const [koreSessionId, setKoreSessionId] = useState<string | null>(null);  // Kore's internal session ID
     const llmInspectorRef = useRef<LLMInspectorRef>(null);
     const { showToast } = useNotification();
@@ -57,12 +56,6 @@ function HomeContent() {
     // Sidebar state
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
-
-    useEffect(() => {
-        // Use RedGuard- prefix so we can easily identify our interactions in Kore GenAI logs
-        const sessionId = Math.random().toString(36).substring(2, 10);
-        setUserId(`RedGuard-${sessionId}`);
-    }, []);
 
     // Auto-refresh Kore GenAI Logs after bot response (5 second delay)
     // Only works if Inspector is mounted
