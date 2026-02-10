@@ -49,8 +49,15 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             });
 
             const data = await res.json();
+            console.log("Kore Connection Metadata:", data);
 
-            const foundName = data.botName || data.botInfo?.name || data.meta?.botName;
+            // Comprehensive scan for bot identity in the connection response
+            const foundName = data.botName ||
+                data.botInfo?.name ||
+                data.meta?.botName ||
+                data.data?.[0]?.botName ||
+                data.data?.[0]?.botInfo?.name;
+
             if (foundName && onBotNameUpdate) {
                 onBotNameUpdate(foundName);
             }
@@ -91,7 +98,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 if (onBotNameUpdate) onBotNameUpdate(data.name);
             } else {
                 setValidationMessage(data.message || 'Connected (Bot name restricted)');
-                if (onBotNameUpdate) onBotNameUpdate(null);
+                // Don't clear a name that might have been found by initializeChat
             }
 
         } catch (err: any) {
