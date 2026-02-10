@@ -8,7 +8,10 @@ const prisma = new PrismaClient();
 router.get('/', async (req, res) => {
     try {
         const limit = parseInt(req.query.limit) || 50;
+        const userId = req.query.userId || req.headers['x-user-id'] || 'default-user';
+
         const runs = await prisma.evaluationRun.findMany({
+            where: { userId },
             orderBy: { createdAt: 'desc' },
             take: limit
         });
@@ -23,6 +26,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const {
+            userId,
             sessionId,
             userInput,
             botResponse,
@@ -41,8 +45,11 @@ router.post('/', async (req, res) => {
             model
         } = req.body;
 
+        const effectiveUserId = userId || req.headers['x-user-id'] || 'default-user';
+
         const run = await prisma.evaluationRun.create({
             data: {
+                userId: effectiveUserId,
                 sessionId: sessionId || null,
                 userInput,
                 botResponse,
@@ -72,6 +79,20 @@ router.post('/', async (req, res) => {
 // Delete a run
 router.delete('/:id', async (req, res) => {
     try {
+        const userId = req.query.userId || req.headers['x-user-id'] || 'default-user';
+
+        // First check if the run belongs to this user
+        const run = await prisma.evaluationRun.findFirst({
+            where: {
+                id: req.params.id,
+                userId
+            }
+        });
+
+        if (!run) {
+            return res.status(404).json({ error: 'Run not found or access denied' });
+        }
+
         await prisma.evaluationRun.delete({
             where: { id: req.params.id }
         });
