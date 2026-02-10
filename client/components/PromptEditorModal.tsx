@@ -168,22 +168,22 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
             />
 
             {/* Modal */}
-            <div className="relative w-[90vw] max-w-4xl h-[80vh] bg-white dark:bg-gray-800 rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn">
+            <div className="relative w-[90vw] max-w-4xl h-[80vh] bg-white rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn">
                 {/* Header */}
-                <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <div className="flex items-center justify-between p-4 border-b border-gray-200 bg-gray-50">
                     <div className="flex items-center gap-3">
                         <div className="w-8 h-8 rounded-lg bg-gradient-to-br from-[var(--primary-500)] to-[var(--primary-700)] flex items-center justify-center">
                             <svg className="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                             </svg>
                         </div>
-                        <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
+                        <h2 className="text-lg font-semibold text-gray-900">
                             Custom Evaluation Prompt Editor
                         </h2>
                     </div>
                     <button
                         onClick={onClose}
-                        className="p-2 rounded-lg hover:bg-gray-200 dark:hover:bg-gray-700 transition-colors"
+                        className="p-2 rounded-lg hover:bg-gray-200 transition-colors"
                     >
                         <svg className="w-5 h-5 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -192,11 +192,11 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                 </div>
 
                 {/* Toolbar */}
-                <div className="flex items-center gap-2 p-3 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800">
+                <div className="flex items-center gap-2 p-3 border-b border-gray-200 bg-white">
                     <button
                         onClick={handleUndo}
                         disabled={historyIndex <= 0}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         title="Undo (Cmd/Ctrl+Z)"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -207,7 +207,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                     <button
                         onClick={handleRedo}
                         disabled={historyIndex >= history.length - 1}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         title="Redo (Cmd/Ctrl+Shift+Z)"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -216,11 +216,11 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                         Redo
                     </button>
 
-                    <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
+                    <div className="w-px h-6 bg-gray-300 mx-1" />
 
                     <button
                         onClick={handleSave}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
                         title="Save to file (Cmd/Ctrl+S)"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -230,7 +230,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                     </button>
                     <button
                         onClick={handleLoad}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 dark:border-gray-600 hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
                         title="Load from file"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -246,11 +246,11 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                         className="hidden"
                     />
 
-                    <div className="w-px h-6 bg-gray-300 dark:bg-gray-600 mx-1" />
+                    <div className="w-px h-6 bg-gray-300 mx-1" />
 
                     <button
                         onClick={onLoadTemplate}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-200 hover:bg-gray-200 dark:hover:bg-gray-600 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-gray-100 text-gray-700 hover:bg-gray-200 transition-colors"
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
@@ -280,9 +280,9 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
 
                 {/* Backend Save Overlay */}
                 {isSavingToBackend && (
-                    <div className="mx-4 mt-2 mb-0 bg-indigo-50 dark:bg-indigo-900/20 p-3 rounded-lg border border-indigo-200 dark:border-indigo-800 animate-in fade-in slide-in-from-top-2 duration-200 shadow-inner flex items-center justify-between gap-4">
+                    <div className="mx-4 mt-2 mb-0 bg-indigo-50 p-3 rounded-lg border border-indigo-200 animate-in fade-in slide-in-from-top-2 duration-200 shadow-inner flex items-center justify-between gap-4">
                         <div className="flex items-center gap-3 flex-1">
-                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 dark:text-indigo-400 uppercase tracking-wider whitespace-nowrap">
+                            <div className="flex items-center gap-1.5 text-[10px] font-bold text-indigo-700 uppercase tracking-wider whitespace-nowrap">
                                 <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
@@ -293,7 +293,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                                 value={newBackendName}
                                 onChange={e => setNewBackendName(e.target.value)}
                                 placeholder="Enter a name for this template..."
-                                className="text-sm border border-gray-300 dark:border-gray-600 rounded-md px-3 py-1.5 flex-1 bg-white dark:bg-gray-800 focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
+                                className="text-sm border border-gray-300 rounded-md px-3 py-1.5 flex-1 bg-white focus:ring-2 focus:ring-indigo-500 outline-none shadow-sm"
                                 autoFocus
                                 onKeyDown={e => {
                                     if (e.key === 'Enter') handleBackendSave();
@@ -310,7 +310,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                             </button>
                             <button
                                 onClick={() => setIsSavingToBackend(false)}
-                                className="px-3 py-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 text-sm font-medium"
+                                className="px-3 py-1.5 text-gray-500 hover:text-gray-700 text-sm font-medium"
                             >
                                 Cancel
                             </button>
@@ -324,7 +324,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                     const missing = required.filter(r => !value.includes(r));
                     if (missing.length > 0) {
                         return (
-                            <div className="mx-4 mt-2 p-2 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-md flex items-center gap-2 text-xs text-red-600 dark:text-red-400 animate-pulse">
+                            <div className="mx-4 mt-2 p-2 bg-red-50 border border-red-200 rounded-md flex items-center gap-2 text-xs text-red-600 animate-pulse">
                                 <svg className="w-4 h-4 shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
                                 </svg>
@@ -343,7 +343,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                         ref={textareaRef}
                         value={value}
                         onChange={(e) => onChange(e.target.value)}
-                        className="w-full h-full p-4 border border-gray-300 dark:border-gray-600 rounded-lg bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-200 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--primary-500)] focus:border-transparent"
+                        className="w-full h-full p-4 border border-gray-300 rounded-lg bg-gray-50 text-gray-800 font-mono text-sm resize-none focus:outline-none focus:ring-2 focus:ring-[var(--primary-500)] focus:border-transparent"
                         placeholder="Enter your custom evaluation prompt here...
 
 Available variables:
@@ -357,9 +357,9 @@ Available variables:
                 </div>
 
                 {/* Footer */}
-                <div className="flex items-center justify-between p-4 border-t border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+                <div className="flex items-center justify-between p-4 border-t border-gray-200 bg-gray-50">
                     <p className="text-xs text-gray-500">
-                        Press <kbd className="px-1.5 py-0.5 bg-gray-200 dark:bg-gray-700 rounded text-xs">Esc</kbd> to close
+                        Press <kbd className="px-1.5 py-0.5 bg-gray-200 rounded text-xs">Esc</kbd> to close
                     </p>
                     <button
                         onClick={onClose}

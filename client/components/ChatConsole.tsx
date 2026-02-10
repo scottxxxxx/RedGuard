@@ -7,8 +7,8 @@ interface Props {
     config: CompositeGuardrailConfig | null;
     botConfig: BotConfig | null;
     onInteractionUpdate?: (userMsg: string, botMsg: string) => void;
-    messages: { role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean }[];
-    setMessages: React.Dispatch<React.SetStateAction<{ role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean }[]>>;
+    messages: { role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean, attackCategory?: string }[];
+    setMessages: React.Dispatch<React.SetStateAction<{ role: 'user' | 'bot' | 'evaluation', text: string, passed?: boolean, timestamp?: Date, isAttack?: boolean, attackCategory?: string }[]>>;
     userId: string;
     koreSessionId?: string | null;  // The Kore platform session ID
     onSessionReset?: () => void;
@@ -24,6 +24,7 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const { showToast } = useNotification();
     const [lastGeneratedAttack, setLastGeneratedAttack] = useState<string | null>(null);
+    const [lastAttackCategory, setLastAttackCategory] = useState<string | null>(null);
 
     const scrollToBottom = (behavior: ScrollBehavior = "smooth") => {
         if (scrollContainerRef.current) {
@@ -65,6 +66,7 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
             if (data.prompt) {
                 setInput(data.prompt);
                 setLastGeneratedAttack(data.prompt);
+                setLastAttackCategory(type); // Store the attack category
             } else {
                 showToast('No prompt generated.', 'info');
             }
@@ -84,14 +86,39 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
             // Let's add a local system message if key is missing but guardrails are on
         }
 
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         const userMsg = input;
         const isAttack = userMsg === lastGeneratedAttack;
-        setMessages(prev => [...prev, { role: 'user', text: userMsg, timestamp: new Date(), isAttack }]);
+        const attackCategory = isAttack ? lastAttackCategory : null;
+        setMessages(prev => [...prev, { role: 'user', text: userMsg, timestamp: new Date(), isAttack, attackCategory: attackCategory || undefined }]);
         setInput('');
+
+        // Save attack message to database if it's an attack
+        if (isAttack && koreSessionId && attackCategory) {
+            const turnIndex = messages.filter(m => m.role === 'user').length; // Current user turn index
+            try {
+                await fetch(`${apiUrl}/attack-messages`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        sessionId: koreSessionId,
+                        messageContent: userMsg,
+                        category: attackCategory,
+                        turnIndex,
+                        botId: botConfig?.botId || null,
+                        userId
+                    })
+                });
+            } catch (error) {
+                console.error('[ChatConsole] Failed to save attack message:', error);
+                // Don't block the chat flow if saving fails
+            }
+        }
+
         setLastGeneratedAttack(null);
+        setLastAttackCategory(null);
         setLoading(true);
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
             const res = await fetch(`${apiUrl}/chat/send`, {
                 method: 'POST',
@@ -180,8 +207,15 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                                 : 'bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)] shadow-sm'
                             }`}>
                             {msg.isAttack && msg.role === 'user' && (
-                                <div className="text-[9px] font-bold uppercase tracking-wider mb-1 text-red-100 flex items-center gap-1">
-                                    <span className="animate-pulse">⚠️</span> Malicious Probe
+                                <div className="flex items-center gap-2 mb-1.5">
+                                    <div className="text-[9px] font-bold uppercase tracking-wider text-red-100 flex items-center gap-1">
+                                        <span className="animate-pulse">⚠️</span> Malicious Probe
+                                    </div>
+                                    {msg.attackCategory && (
+                                        <span className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide rounded-full bg-red-800/50 text-red-100 border border-red-400/30">
+                                            {msg.attackCategory}
+                                        </span>
+                                    )}
                                 </div>
                             )}
                             <pre className="whitespace-pre-wrap font-sans text-sm">{msg.text}</pre>
@@ -221,13 +255,13 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                             </button>
 
                             {showAttackMenu && (
-                                <div className="absolute bottom-full right-0 mb-2 w-48 bg-gray-900 border border-gray-700 rounded-lg shadow-xl z-20 overflow-hidden">
-                                    <div className="text-xs font-semibold text-gray-400 px-3 py-2 bg-gray-800 border-b border-gray-700">Select Attack Type</div>
+                                <div className="absolute bottom-full right-0 mb-2 w-48 bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-xl z-20 overflow-hidden">
+                                    <div className="text-xs font-semibold text-[var(--foreground-muted)] px-3 py-2 bg-[var(--surface-hover)] border-b border-[var(--border)]">Select Attack Type</div>
                                     {['toxicity', 'injection', 'topics', 'encoding'].map(type => (
                                         <button
                                             key={type}
                                             onClick={() => generateAttack(type)}
-                                            className="w-full text-left px-3 py-2 text-xs text-gray-300 hover:bg-red-900/30 hover:text-white capitalize transition-colors block"
+                                            className="w-full text-left px-3 py-2 text-xs text-[var(--foreground)] hover:bg-red-500/10 hover:text-red-600 dark:hover:text-red-400 capitalize transition-colors block"
                                         >
                                             {type}
                                         </button>

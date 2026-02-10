@@ -37,21 +37,20 @@ router.post('/llm-logs', async (req, res) => {
                     update: {}, // Don't update if exists, just skip
                     create: {
                         koreId: koreId,
-                        timestamp: log.timestamp ? new Date(log.timestamp) : new Date(),
-                        sessionId: log.sessionId,
-                        featureName: log.featureName,
-                        model: log.model,
-                        status: log.status,
-                        description: log.description || log.desc,
-                        requestPayload: log.requestPayload ? JSON.stringify(log.requestPayload) : null,
-                        responsePayload: log.responsePayload ? JSON.stringify(log.responsePayload) : null,
-                        inputTokens: log.inputTokens || 0,
-                        outputTokens: log.outputTokens || 0,
-                        totalTokens: log.totalTokens || 0,
+                        timestamp: log['start Date'] ? new Date(log['start Date']) : new Date(),
+                        sessionId: log['Session ID'],
+                        featureName: log['Feature Name '] || log.Feature,
+                        model: log.Integration || log['Model Name'] || log.Model,
+                        status: log.Status,
+                        description: log.Description,
+                        requestPayload: log['Payload Details']?.['Request Payload'] ? JSON.stringify(log['Payload Details']['Request Payload']) : null,
+                        responsePayload: log['Payload Details']?.['Response Payload'] ? JSON.stringify(log['Payload Details']['Response Payload']) : null,
+                        inputTokens: 0, // Kore API doesn't provide token counts in these logs
+                        outputTokens: 0,
+                        totalTokens: 0,
                         botId: botConfig.botId,
-                        userId: botConfig.userId, // Storing who requested it or the user in the log? 'userId' in schema is RedGuard user.
-                        // The log itself might have channelUserId
-                        channelUserId: log.channelUserId || log.userId // Kore sometimes uses userId for channel user
+                        userId: botConfig.userId,
+                        channelUserId: log['User ID']
                     }
                 }).catch(err => {
                     console.error("Failed to save log:", err.message);
@@ -80,11 +79,68 @@ router.post('/validate', async (req, res) => {
             return res.status(400).json({ error: "No configuration provided." });
         }
 
-        const info = await koreApiService.getBotInfo(botConfig);
-        res.json(info);
+        // Step 1: Validate credentials and bot existence (independent of webhook)
+        try {
+            const botInfo = await koreApiService.getBotInfo(botConfig);
+            console.log(`[Validation] Credentials valid, bot found: ${botInfo.name || botInfo.id}`);
+        } catch (credentialError) {
+            // Credentials are invalid or bot doesn't exist in account
+            console.error("Credential validation failed:", credentialError.message);
+
+            if (credentialError.message.includes('401') || credentialError.message.includes('403')) {
+                throw new Error("Invalid credentials - Client ID or Secret is incorrect");
+            } else if (credentialError.message.includes('not found')) {
+                throw new Error("Bot not found - Bot ID does not exist in your Kore.ai account");
+            } else {
+                throw new Error(`Credential validation failed: ${credentialError.message}`);
+            }
+        }
+
+        // Step 2: Validate webhook URL by attempting connection
+        const koreWebhook = require('../services/kore-webhook');
+        try {
+            const testUserId = `validation-${Date.now()}`;
+            await koreWebhook.sendMessage(
+                testUserId,
+                { type: "event", val: "ON_CONNECT" },
+                { new: true },
+                botConfig
+            );
+
+            // If we got here, everything works
+            res.json({
+                valid: true,
+                message: "Credentials and webhook validated successfully"
+            });
+        } catch (webhookError) {
+            // Credentials are good, but webhook connection failed
+            console.error("Webhook connection failed:", webhookError.message);
+
+            if (webhookError.response?.status === 404) {
+                throw new Error("Webhook URL not found (404) - The webhook endpoint does not exist. Check the URL format.");
+            } else if (webhookError.code === 'ENOTFOUND') {
+                throw new Error("Webhook URL unreachable - Cannot resolve hostname. Check if the URL is correct.");
+            } else if (webhookError.code === 'ECONNREFUSED') {
+                throw new Error("Webhook connection refused - The server is not accepting connections.");
+            } else {
+                throw new Error(`Webhook validation failed (credentials are valid): ${webhookError.message}`);
+            }
+        }
     } catch (error) {
         console.error("Kore Validation Error:", error.message);
-        res.status(401).json({
+
+        // Return appropriate status code based on error type
+        let statusCode = 500; // Default to server error
+
+        if (error.message.includes('Invalid credentials') || error.message.includes('401') || error.message.includes('403')) {
+            statusCode = 401;
+        } else if (error.message.includes('not found') || error.message.includes('404')) {
+            statusCode = 404;
+        } else if (error.message.includes('unreachable') || error.message.includes('ENOTFOUND')) {
+            statusCode = 503; // Service Unavailable
+        }
+
+        res.status(statusCode).json({
             error: error.message
         });
     }

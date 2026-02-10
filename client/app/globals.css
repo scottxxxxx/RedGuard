@@ -33,11 +33,46 @@
   --surface: #ffffff;
   --surface-hover: #f1f5f9;
   --foreground: #1e293b;
-  --foreground-muted: #64748b;
+  --foreground-muted: #475569;
+  --foreground-secondary: #334155;
   --border: #e2e8f0;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.05);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+
+  /* Success states */
+  --success-bg: #dcfce7;
+  --success-border: #86efac;
+  --success-text: #15803d;
+
+  /* Warning states */
+  --warning-bg: #fef3c7;
+  --warning-border: #fcd34d;
+  --warning-text: #b45309;
+
+  /* Error states */
+  --error-bg: #fee2e2;
+  --error-border: #fca5a5;
+  --error-text: #b91c1c;
+
+  /* Info states */
+  --info-bg: #dbeafe;
+  --info-border: #93c5fd;
+  --info-text: #1d4ed8;
+
+  /* Badge variants */
+  --badge-blue-bg: #dbeafe;
+  --badge-blue-text: #1e40af;
+  --badge-purple-bg: #e9d5ff;
+  --badge-purple-text: #7e22ce;
+  --badge-orange-bg: #fed7aa;
+  --badge-orange-text: #c2410c;
+  --badge-gray-bg: #e5e7eb;
+  --badge-gray-text: #1f2937;
+
+  /* Stats cards */
+  --stats-bg: #f1f5f9;
+  --stats-border: #cbd5e1;
 
   /* Sidebar Light */
   --sidebar-active: #e5e7eb;
@@ -55,10 +90,45 @@
   --surface-hover: #334155;
   --foreground: #f1f5f9;
   --foreground-muted: #94a3b8;
+  --foreground-secondary: #cbd5e1;
   --border: #334155;
   --shadow-sm: 0 1px 2px 0 rgb(0 0 0 / 0.3);
   --shadow-md: 0 4px 6px -1px rgb(0 0 0 / 0.4);
   --shadow-lg: 0 10px 15px -3px rgb(0 0 0 / 0.5);
+
+  /* Success states */
+  --success-bg: rgba(34, 197, 94, 0.15);
+  --success-border: rgba(34, 197, 94, 0.3);
+  --success-text: #86efac;
+
+  /* Warning states */
+  --warning-bg: rgba(251, 191, 36, 0.15);
+  --warning-border: rgba(251, 191, 36, 0.3);
+  --warning-text: #fcd34d;
+
+  /* Error states */
+  --error-bg: rgba(239, 68, 68, 0.15);
+  --error-border: rgba(239, 68, 68, 0.3);
+  --error-text: #fca5a5;
+
+  /* Info states */
+  --info-bg: rgba(59, 130, 246, 0.15);
+  --info-border: rgba(59, 130, 246, 0.3);
+  --info-text: #93c5fd;
+
+  /* Badge variants */
+  --badge-blue-bg: rgba(37, 99, 235, 0.2);
+  --badge-blue-text: #93c5fd;
+  --badge-purple-bg: rgba(147, 51, 234, 0.2);
+  --badge-purple-text: #e9d5ff;
+  --badge-orange-bg: rgba(234, 88, 12, 0.2);
+  --badge-orange-text: #fdba74;
+  --badge-gray-bg: rgba(107, 114, 128, 0.2);
+  --badge-gray-text: #d1d5db;
+
+  /* Stats cards */
+  --stats-bg: #1e293b;
+  --stats-border: #334155;
 
   /* Sidebar Dark */
   --sidebar-active: #374151;
@@ -247,6 +317,19 @@ body {
 
 .animate-fade-in {
   animation: fadeIn 0.3s ease-out;
+}
+
+@keyframes pulse-slow {
+  0%, 100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.5;
+  }
+}
+
+.animate-pulse-slow {
+  animation: pulse-slow 3s cubic-bezier(0.4, 0, 0.6, 1) infinite;
 }
 
 /* Tab styling */

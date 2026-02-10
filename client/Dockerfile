@@ -11,6 +11,9 @@ RUN npm install
 # Copy source code
 COPY . .
 
+# Set production environment
+ENV NODE_ENV=production
+
 # Declare build arguments
 ARG NEXT_PUBLIC_API_URL
 ENV NEXT_PUBLIC_API_URL=$NEXT_PUBLIC_API_URL

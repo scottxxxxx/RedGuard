@@ -10,7 +10,6 @@ export type GuardrailPolicy = {
 
 interface Props {
     onConfigChange: (config: GuardrailPolicy) => void;
-    onBotNameUpdate?: (name: string | null) => void;
     onBotConfigUpdate?: (config: any) => void;
 }
 
@@ -30,12 +29,12 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
             </button>
 
             {isOpen && (
-                <div className="absolute right-0 top-8 w-80 p-4 bg-gray-900 text-white border border-gray-700 rounded-lg shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
-                    <div className="flex justify-between items-start mb-3 border-b border-gray-700 pb-2">
-                        <h4 className="font-semibold text-sm text-gray-100">Feature Details</h4>
+                <div className="absolute right-0 top-8 w-80 p-4 bg-[var(--surface)] text-[var(--foreground)] border border-[var(--border)] rounded-lg shadow-2xl z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div className="flex justify-between items-start mb-3 border-b border-[var(--border)] pb-2">
+                        <h4 className="font-semibold text-sm text-[var(--foreground)]">Feature Details</h4>
                         <button
                             onClick={() => setIsOpen(false)}
-                            className="text-gray-400 hover:text-white transition-colors p-0.5 hover:bg-gray-800 rounded"
+                            className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors p-0.5 hover:bg-[var(--surface-hover)] rounded"
                             aria-label="Close"
                         >
                             <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -44,19 +43,19 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
                         </button>
                     </div>
 
-                    {text && <p className="mb-4 text-xs text-gray-300 leading-relaxed">{text}</p>}
+                    {text && <p className="mb-4 text-xs text-[var(--foreground-muted)] leading-relaxed">{text}</p>}
 
                     {features && features.length > 0 ? (
-                        <div className="max-h-60 overflow-y-auto pr-1 scrollbar-thin scrollbar-thumb-gray-600 scrollbar-track-transparent">
-                            <p className="font-semibold mb-2 text-xs uppercase tracking-wide text-[var(--primary-400)]">Enabled for Features:</p>
-                            <ul className="list-disc pl-4 space-y-1.5 bg-gray-800/50 p-2 rounded border border-gray-800/50">
+                        <div className="max-h-60 overflow-y-auto pr-1">
+                            <p className="font-semibold mb-2 text-xs uppercase tracking-wide text-[var(--primary-600)]">Enabled for Features:</p>
+                            <ul className="list-disc pl-4 space-y-1.5 bg-[var(--surface-hover)] p-2 rounded border border-[var(--border)]">
                                 {features.map((f, i) => (
-                                    <li key={i} className="text-xs text-gray-300">{f}</li>
+                                    <li key={i} className="text-xs text-[var(--foreground-muted)]">{f}</li>
                                 ))}
                             </ul>
                         </div>
                     ) : (
-                        <div className="text-xs text-gray-400 italic bg-gray-800/30 p-2 rounded border border-gray-800/30">
+                        <div className="text-xs text-[var(--foreground-muted)] italic bg-[var(--surface-hover)] p-2 rounded border border-[var(--border)]">
                             Load app definition to view enabled features
                         </div>
                     )}
@@ -66,7 +65,7 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
     );
 };
 
-export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onBotConfigUpdate }: Props) {
+export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate }: Props) {
     const [toggles, setToggles] = useState({
         toxicity_input: true,
         toxicity_output: true,
@@ -107,8 +106,9 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
             <div className="shrink-0 flex items-center justify-between mb-4 pb-3 border-b border-[var(--border)]">
                 <div className="flex items-center gap-2">
                     <div className="w-6 h-6 rounded-md bg-[var(--primary-50)] flex items-center justify-center">
-                        <svg className="w-4 h-4 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" />
+                        <svg className="w-4 h-4 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                            <line x1="9" y1="12" x2="15" y2="12" />
                         </svg>
                     </div>
                     <h3 className="text-base font-semibold text-[var(--foreground)]">
@@ -130,15 +130,15 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
                             const reader = new FileReader();
                             reader.onload = async (ev) => {
                                 try {
+                                    console.log("📄 File loaded, parsing JSON...");
                                     const content = JSON.parse(ev.target?.result as string);
+                                    console.log("✅ JSON parsed successfully");
 
-                                    // 1. Instantly update Bot Identity if found
-                                    const botName = content.name || content.botName;
+                                    // 1. Update Bot ID if found
                                     const botId = content.botId || content._id || content.id;
 
-                                    if (botName && onBotNameUpdate) {
-                                        onBotNameUpdate(botName);
-                                    }
+                                    console.log("Bot ID:", botId);
+
                                     if (botId && onBotConfigUpdate) {
                                         onBotConfigUpdate((prev: any) => ({ ...prev, botId }));
                                     }
@@ -155,15 +155,19 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
 
                                     // 3. Request logic analysis from backend
                                     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+                                    console.log("🔄 Sending to backend:", apiUrl);
+
                                     const res = await fetch(`${apiUrl}/evaluate/analyze-config`, {
                                         method: 'POST',
                                         headers: { 'Content-Type': 'application/json' },
                                         body: JSON.stringify({ botConfig: content })
                                     });
 
+                                    console.log("📥 Response status:", res.status);
+
                                     if (res.ok) {
                                         const data = await res.json();
-                                        console.log("Analysis Result:", data);
+                                        console.log("✅ Analysis Result:", data);
 
                                         // Update Descriptions and Feature Details
                                         if (data.descriptions) setDescriptions(data.descriptions);
@@ -187,21 +191,42 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
                                         }
 
                                         // Apply data fields
+                                        console.log("📋 Received topics:", data.topics);
+                                        console.log("📋 Received regexPatterns:", data.regexPatterns);
+
                                         if (data.topics && data.topics.length > 0) {
-                                            setBannedTopics(data.topics.join(', '));
+                                            const topicsStr = data.topics.join(', ');
+                                            console.log("✏️ Setting bannedTopics to:", topicsStr);
+                                            setBannedTopics(topicsStr);
+                                        } else {
+                                            console.log("⚠️ No topics to set");
                                         }
+
                                         if (data.regexPatterns && data.regexPatterns.length > 0) {
-                                            setRegexPatterns(data.regexPatterns.join('\n'));
+                                            const regexStr = data.regexPatterns.join('\n');
+                                            console.log("✏️ Setting regexPatterns to:", regexStr);
+                                            setRegexPatterns(regexStr);
+                                        } else {
+                                            console.log("⚠️ No regex patterns to set");
                                         }
 
                                         // Force UI refresh with new toggles
+                                        console.log("🔄 Updating toggles:", newToggles);
                                         setToggles(newToggles);
+                                        console.log("✅ Guardrail settings updated successfully!");
                                     } else {
-                                        console.error("Failed to analyze config file");
+                                        const errorText = await res.text();
+                                        console.error("❌ Failed to analyze config file. Status:", res.status);
+                                        console.error("Error response:", errorText);
+                                        alert(`Failed to analyze config: ${errorText}`);
                                     }
                                 } catch (err) {
-                                    console.error("Error reading file", err);
-                                    alert("Invalid JSON file.");
+                                    console.error("❌ Error:", err);
+                                    if (err instanceof SyntaxError) {
+                                        alert("Invalid JSON file. Please check the file format.");
+                                    } else {
+                                        alert(`Error: ${err instanceof Error ? err.message : String(err)}`);
+                                    }
                                 }
                                 e.target.value = '';
                             };
@@ -230,11 +255,11 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
                     </div>
                     <div className="ml-2 flex flex-row gap-4">
                         <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={toggles.toxicity_input} onChange={() => handleToggle('toxicity_input')} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <input type="checkbox" checked={toggles.toxicity_input} onChange={() => handleToggle('toxicity_input')} className="rounded border-[var(--border)] text-[var(--primary-600)] shadow-sm focus:border-[var(--primary-500)] focus:ring focus:ring-[var(--primary-200)] focus:ring-opacity-50" />
                             <span className="text-xs text-[var(--foreground-muted)]">Input Filtering</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={toggles.toxicity_output} onChange={() => handleToggle('toxicity_output')} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <input type="checkbox" checked={toggles.toxicity_output} onChange={() => handleToggle('toxicity_output')} className="rounded border-[var(--border)] text-[var(--primary-600)] shadow-sm focus:border-[var(--primary-500)] focus:ring focus:ring-[var(--primary-200)] focus:ring-opacity-50" />
                             <span className="text-xs text-[var(--foreground-muted)]">Output Filtering</span>
                         </label>
                     </div>
@@ -248,11 +273,11 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
                     </div>
                     <div className="ml-2 flex flex-row gap-4">
                         <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={toggles.topics_input} onChange={() => handleToggle('topics_input')} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <input type="checkbox" checked={toggles.topics_input} onChange={() => handleToggle('topics_input')} className="rounded border-[var(--border)] text-[var(--primary-600)] shadow-sm focus:border-[var(--primary-500)] focus:ring focus:ring-[var(--primary-200)] focus:ring-opacity-50" />
                             <span className="text-xs text-[var(--foreground-muted)]">Input Filtering</span>
                         </label>
                         <label className="flex items-center gap-2 cursor-pointer">
-                            <input type="checkbox" checked={toggles.topics_output} onChange={() => handleToggle('topics_output')} className="rounded border-gray-300 text-indigo-600 shadow-sm focus:border-indigo-300 focus:ring focus:ring-indigo-200 focus:ring-opacity-50" />
+                            <input type="checkbox" checked={toggles.topics_output} onChange={() => handleToggle('topics_output')} className="rounded border-[var(--border)] text-[var(--primary-600)] shadow-sm focus:border-[var(--primary-500)] focus:ring focus:ring-[var(--primary-200)] focus:ring-opacity-50" />
                             <span className="text-xs text-[var(--foreground-muted)]">Output Filtering</span>
                         </label>
                     </div>
@@ -272,13 +297,13 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
 
                 {/* Injection */}
                 <div className="border-t border-[var(--border)] pt-3">
-                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors cursor-pointer" onClick={() => handleToggle('injection')}>
+                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
                         <div className="flex items-center gap-3 flex-1">
                             <input
                                 type="checkbox"
                                 checked={toggles.injection}
-                                readOnly
-                                className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)] pointer-events-none"
+                                onChange={() => handleToggle('injection')}
+                                className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)] cursor-pointer"
                             />
                             <span className="text-sm text-[var(--foreground)]">Detect Prompt Injections (Input Only)</span>
                         </div>
@@ -288,13 +313,13 @@ export default function GuardrailSettings({ onConfigChange, onBotNameUpdate, onB
 
                 {/* Regex */}
                 <div className="border-t border-[var(--border)] pt-3">
-                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors cursor-pointer" onClick={() => handleToggle('regex')}>
+                    <label className="flex items-center p-2 rounded-lg hover:bg-[var(--surface-hover)] transition-colors cursor-pointer">
                         <div className="flex items-center gap-3 flex-1">
                             <input
                                 type="checkbox"
                                 checked={toggles.regex}
-                                readOnly
-                                className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)] pointer-events-none"
+                                onChange={() => handleToggle('regex')}
+                                className="h-4 w-4 text-[var(--primary-600)] border-[var(--border)] rounded focus:ring-[var(--primary-500)] cursor-pointer"
                             />
                             <span className="text-sm text-[var(--foreground)]">Filter Responses (Regex) (Output Only)</span>
                         </div>

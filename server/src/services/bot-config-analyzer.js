@@ -17,10 +17,11 @@ class BotConfigAnalyzer {
         const featureDetails = {}; // Maps guardrail type -> feature list
 
         if (!config) {
+            console.log("❌ Config is null or undefined");
             return { topics, regexPatterns, descriptions, enabledGuardrails, featureDetails };
         }
 
-        console.log("Analyzing Config. Root keys:", Object.keys(config));
+        console.log("✅ Analyzing Config. Root keys:", Object.keys(config).slice(0, 10));
 
         // Get guardrailsList from llmConfiguration[0].guardrailsList
         let guardrailsList = null;
@@ -114,6 +115,21 @@ class BotConfigAnalyzer {
                     if (applyAt.includes('output') || applyAt === 'both' || applyAt === 'response') hasOutput = true;
                 });
 
+                // Fallback: If no features or no input/output determined, use type-specific defaults
+                if (!hasInput && !hasOutput) {
+                    if (type === 'injection') {
+                        // Prompt injection is input-only by default
+                        hasInput = true;
+                    } else if (type === 'regex') {
+                        // Regex filtering is output-only by default
+                        hasOutput = true;
+                    } else {
+                        // For toxicity and topics, enable both input and output
+                        hasInput = true;
+                        hasOutput = true;
+                    }
+                }
+
                 if (hasInput) enabledGuardrails.push(`${type}_input`);
                 if (hasOutput) enabledGuardrails.push(`${type}_output`);
 
@@ -146,6 +162,12 @@ class BotConfigAnalyzer {
         Object.keys(featureDetails).forEach(type => {
             featureDetails[type].sort();
         });
+
+        console.log("📊 Analysis Complete:");
+        console.log("  - enabledGuardrails:", enabledGuardrails);
+        console.log("  - topics:", topics);
+        console.log("  - regexPatterns:", regexPatterns);
+        console.log("  - featureDetails keys:", Object.keys(featureDetails));
 
         return { topics, regexPatterns, descriptions, enabledGuardrails, featureDetails };
     }
