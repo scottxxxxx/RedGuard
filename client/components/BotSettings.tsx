@@ -49,18 +49,6 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             });
 
             const data = await res.json();
-            console.log("Kore Connection Metadata:", data);
-
-            // Comprehensive scan for bot identity in the connection response
-            const foundName = data.botName ||
-                data.botInfo?.name ||
-                data.meta?.botName ||
-                data.data?.[0]?.botName ||
-                data.data?.[0]?.botInfo?.name;
-
-            if (foundName && onBotNameUpdate) {
-                onBotNameUpdate(foundName);
-            }
 
             // Extract Kore session ID from connection response
             if (data.sessionId && onKoreSessionUpdate) {
@@ -93,18 +81,10 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             if (!res.ok) throw new Error(data.error || 'Validation failed');
 
             setValidationStatus('success');
-            if (data.name) {
-                setValidationMessage(`Connected as "${data.name}"`);
-                if (onBotNameUpdate) onBotNameUpdate(data.name);
-            } else {
-                setValidationMessage(data.message || 'Connected (Bot name restricted)');
-                // Don't clear a name that might have been found by initializeChat
-            }
-
+            setValidationMessage('Connection validated successfully');
         } catch (err: any) {
             setValidationStatus('error');
             setValidationMessage(err.message);
-            if (onBotNameUpdate) onBotNameUpdate(null);
         }
     };
 
@@ -145,6 +125,39 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
         setConfig(prev => ({ ...prev, [key]: value }));
     };
 
+    const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (!file) return;
+
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const content = JSON.parse(event.target?.result as string);
+
+                // Extract bot name from definition
+                const botName = content.name || content.botName;
+                if (botName && onBotNameUpdate) {
+                    console.log(`[App Definition] Found bot name: ${botName}`);
+                    onBotNameUpdate(botName);
+                }
+
+                // If definition contains bot ID, update it too
+                const botId = content.botId || content._id || content.id;
+                if (botId) {
+                    setConfig(prev => ({ ...prev, botId }));
+                }
+
+                setValidationStatus('success');
+                setValidationMessage(`Loaded app definition for "${botName || 'Unknown Bot'}"`);
+            } catch (err) {
+                console.error("Failed to parse app definition", err);
+                setValidationStatus('error');
+                setValidationMessage('Failed to parse app definition JSON');
+            }
+        };
+        reader.readAsText(file);
+    };
+
     return (
         <div className="card p-5 h-full">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[var(--border)]">
@@ -158,6 +171,17 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                     <h3 className="text-base font-semibold text-[var(--foreground)]">
                         Bot Configuration
                     </h3>
+                </div>
+                <div className="flex items-center gap-2">
+                    <label
+                        className="cursor-pointer p-1.5 text-[var(--foreground-muted)] hover:text-[var(--primary-600)] hover:bg-[var(--primary-50)] rounded-md transition-all"
+                        title="Load App Definition"
+                    >
+                        <input type="file" className="hidden" accept=".json" onChange={handleFileUpload} />
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" />
+                        </svg>
+                    </label>
                 </div>
             </div>
 
