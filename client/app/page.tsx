@@ -28,7 +28,11 @@ export default function Home() {
     const [guardrailPolicy, setGuardrailPolicy] = useState<GuardrailPolicy | null>(null);
     const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
     const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
-    const [botName, setBotName] = useState<string | null>(null);
+    const [botName, _setBotName] = useState<string | null>(null);
+    const setBotName = (name: string | null) => {
+        if (name) console.log(`[Identification] Setting Bot Friendly Name: ${name}`);
+        _setBotName(name);
+    };
 
     // Tab State for Evaluator View
     const [activeTab, setActiveTab] = useState<'live' | 'batch'>('live');
