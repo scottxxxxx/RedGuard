@@ -119,6 +119,7 @@ model PromptImprovement {
 
 model EvaluationRun {
   id             String   @id @default(uuid())
+  userId         String   @default("default-user") @map("user_id") // Multi-user support
   sessionId      String?  @map("session_id") // Kore.AI session ID for correlation
   userInput      String   @map("user_input")
   botResponse    String   @map("bot_response")
@@ -145,6 +146,7 @@ model EvaluationRun {
 
   createdAt      DateTime @default(now()) @map("created_at")
 
+  @@index([userId])
   @@map("evaluation_runs")
 }
 
@@ -166,35 +168,37 @@ model AttackMessage {
 
 model ApiLog {
   id             String   @id @default(uuid())
+  userId         String?  @map("user_id") // Multi-user support
   timestamp      DateTime @default(now())
-  
+
   // Request classification
   logType        String   @map("log_type")     // 'kore_chat', 'llm_evaluate', 'garak'
   direction      String   @default("outbound") // 'outbound' (to API) or 'inbound' (response)
-  
+
   // Request details
   method         String?                       // HTTP method
   endpoint       String?                       // URL or endpoint called
   requestBody    String?  @map("request_body") // JSON stringified request
   requestHeaders String?  @map("request_headers") // JSON stringified headers (sanitized)
-  
+
   // Response details
   statusCode     Int?     @map("status_code")
   responseBody   String?  @map("response_body") // JSON stringified response
-  
+
   // Performance
   latencyMs      Int?     @map("latency_ms")
   totalTokens    Int?     @map("total_tokens")
-  
+
   // Error tracking
   isError        Boolean  @default(false) @map("is_error")
   errorMessage   String?  @map("error_message")
-  
+
   // Context
   sessionId      String?  @map("session_id")   // To group related requests
   provider       String?                       // 'anthropic', 'openai', 'gemini', 'kore'
   model          String?                       // Model used (if LLM)
 
+  @@index([userId])
   @@map("api_logs")
 }
 

@@ -14,6 +14,7 @@ import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
+import { useUser } from "@/contexts/UserContext";
 
 // Composite type for ChatConsole
 export type CompositeGuardrailConfig = GuardrailPolicy & {
@@ -23,6 +24,7 @@ export type CompositeGuardrailConfig = GuardrailPolicy & {
 type ViewType = 'evaluator' | 'logs';
 
 function HomeContent() {
+    const { userId } = useUser();
     const [currentView, setCurrentView] = useState<ViewType>('evaluator');
 
     const [guardrailPolicy, setGuardrailPolicy] = useState<GuardrailPolicy | null>(null);
@@ -287,8 +289,12 @@ function HomeContent() {
 
                 await fetch(`${apiUrl}/runs`, {
                     method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'x-user-id': userId
+                    },
                     body: JSON.stringify({
+                        userId,
                         sessionId: koreSessionId || null,
                         userInput: interaction.user,
                         botResponse: interaction.bot,

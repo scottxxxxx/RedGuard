@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { useUser } from '@/contexts/UserContext';
 
 interface EvaluationRun {
     id: string;
@@ -216,6 +217,7 @@ interface RunHistoryProps {
 }
 
 export default function RunHistory({ botId }: RunHistoryProps) {
+    const { userId } = useUser();
     const [runs, setRuns] = useState<EvaluationRun[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
@@ -227,7 +229,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const fetchRuns = async () => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch(`${apiUrl}/runs`);
+            const res = await fetch(`${apiUrl}/runs?userId=${userId}`);
             if (res.ok) {
                 const data = await res.json();
                 setRuns(data);
