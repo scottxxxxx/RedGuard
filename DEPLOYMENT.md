@@ -24,6 +24,46 @@ git push origin main
 
 ---
 
+## Cost Management: Starting & Stopping the VM
+
+To save costs, you can stop the GCP VM when not in use and start it when needed.
+
+### Stop the VM (Save Money)
+```bash
+# Stop the production server
+gcloud compute instances stop redguard-server --zone=us-central1-a
+
+# Verify it's stopped
+gcloud compute instances list --filter="name=redguard-server"
+# STATUS should show: TERMINATED
+```
+
+**Cost Impact**: Stopping the VM stops billing for compute resources. You only pay for disk storage (~$0.40/month for 10GB).
+
+### Start the VM
+```bash
+# Start the server
+gcloud compute instances start redguard-server --zone=us-central1-a
+
+# Verify it's running
+gcloud compute instances list --filter="name=redguard-server"
+# STATUS should show: RUNNING
+# EXTERNAL_IP should show: ***REMOVED_IP***
+```
+
+**Important Notes:**
+- After starting, **wait 1-2 minutes** for SSH service to be fully ready
+- GitHub Actions deployments will fail if the VM is stopped
+- Docker containers automatically restart when the VM boots up
+- Your data persists in the `redguard_data` volume
+
+### Check VM Status Anytime
+```bash
+gcloud compute instances describe redguard-server --zone=us-central1-a --format="value(status)"
+```
+
+---
+
 ## Architecture
 
 - **Source Control**: GitHub
@@ -101,6 +141,34 @@ NEXT_PUBLIC_API_URL=http://***REMOVED_IP***:3001/api
 NODE_ENV=production
 PORT=3001
 DATABASE_URL=file:/data/prod.db
+```
+
+### 4. GCP Firewall Configuration
+
+Ensure the firewall allows incoming traffic on the required ports:
+
+```bash
+# Check current firewall rules
+gcloud compute firewall-rules list --filter="name~redguard"
+
+# The rule should allow: tcp:80,tcp:3000,tcp:3001
+# If port 80 is missing, update it:
+gcloud compute firewall-rules update allow-redguard-ports \
+  --allow=tcp:80,tcp:3000,tcp:3001
+
+# Verify the update
+gcloud compute firewall-rules describe allow-redguard-ports --format="value(allowed[].ports.flatten())"
+# Should output: 80,3000,3001
+```
+
+**Port Usage:**
+- **Port 80**: Client (HTTP) - Primary access point
+- **Port 3000**: Client (alternative) - Legacy, can be removed
+- **Port 3001**: Server API - Required for backend
+
+**Note**: Port 22 (SSH) should be allowed via the default `default-allow-ssh` rule. Verify with:
+```bash
+gcloud compute firewall-rules list --filter="allowed[].ports:22"
 ```
 
 ---
@@ -367,23 +435,76 @@ npm run lint
 
 ### Deployment Fails: SSH Stage
 
-**Symptom**: "Permission denied" or "Host key verification failed"
+**Symptom**: "Permission denied", "Host key verification failed", or "dial tcp :22: i/o timeout"
+
+**Common Causes**:
+1. VM was recently started and SSH service isn't ready yet
+2. SSH keys haven't propagated after VM restart
+3. VM is stopped/terminated
+4. GitHub Actions SSH key not authorized on VM
 
 **Check**:
-1. `GCP_HOST` secret is correct: `***REMOVED_IP***`
-2. `GCP_SSH_KEY` secret contains correct private key
-3. Public key is in VM's `~/.ssh/authorized_keys`
-4. VM is running and accessible
+1. Verify VM is running: `gcloud compute instances list --filter="name=redguard-server"`
+2. Check if SSH is ready: `gcloud compute ssh redguard-server --zone=us-central1-a --command="uptime"`
+3. Verify firewall allows port 22: `gcloud compute firewall-rules list --filter="allowed[].ports:22"`
+4. Check `GCP_HOST` secret is correct: `***REMOVED_IP***`
+5. Ensure `GCP_SSH_KEY` secret contains correct private key
+6. Verify public key is in VM's `~/.ssh/authorized_keys`
 
 **Solutions**:
-```bash
-# Test SSH connection locally
-ssh -i ~/.ssh/your-key your-username@***REMOVED_IP***
 
-# Regenerate SSH keys if needed
-ssh-keygen -t ed25519 -C "github-actions"
-# Add public key to VM
-# Update GCP_SSH_KEY secret with private key
+**Quick Fix - Manual Deployment via GCP Console:**
+If GitHub Actions SSH fails, use the GCP Console's browser SSH (bypasses key issues):
+
+1. Open GCP Console: https://console.cloud.google.com/compute/instancesDetail/zones/us-central1-a/instances/redguard-server?project=redguard-dev-scottguida
+2. Click the **SSH** button (opens browser terminal)
+3. Run deployment commands:
+   ```bash
+   # Login to GHCR (create token at https://github.com/settings/tokens)
+   echo "YOUR_GITHUB_TOKEN" | sudo docker login ghcr.io -u scottguida --password-stdin
+
+   # Download or update docker-compose.prod.yml
+   wget -O docker-compose.prod.yml https://raw.githubusercontent.com/scottguida/RedGuard/main/docker-compose.prod.yml
+
+   # Pull and start latest images
+   sudo docker compose -f docker-compose.prod.yml pull
+   sudo docker compose -f docker-compose.prod.yml up -d
+
+   # Verify
+   sudo docker ps
+   ```
+
+**Long-term Fix - Regenerate SSH Keys:**
+```bash
+# 1. Generate new SSH key pair
+ssh-keygen -t ed25519 -C "github-actions-redguard" -f ~/.ssh/redguard-deploy
+# Press Enter twice (no passphrase for automation)
+
+# 2. Add public key to GCP VM
+gcloud compute instances add-metadata redguard-server \
+  --zone=us-central1-a \
+  --metadata ssh-keys="github-actions:$(cat ~/.ssh/redguard-deploy.pub)"
+
+# 3. Update GitHub Secret
+cat ~/.ssh/redguard-deploy
+# Copy the private key and update GCP_SSH_KEY secret at:
+# https://github.com/scottguida/redguard/settings/secrets/actions
+
+# 4. Test connection
+ssh -i ~/.ssh/redguard-deploy github-actions@***REMOVED_IP***
+```
+
+**Wait After VM Start:**
+If you just started the VM, wait 2-3 minutes before deploying:
+```bash
+# Start VM
+gcloud compute instances start redguard-server --zone=us-central1-a
+
+# Wait for SSH to be ready
+sleep 120
+
+# Then deploy
+git push origin main
 ```
 
 ### Services Won't Start
