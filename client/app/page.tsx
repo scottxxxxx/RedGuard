@@ -12,7 +12,7 @@ import RunHistory from "@/components/RunHistory";
 import LogViewer from "@/components/LogViewer";
 import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
-import { NotificationProvider } from "@/context/NotificationContext";
+import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
 
 // Composite type for ChatConsole
@@ -22,17 +22,12 @@ export type CompositeGuardrailConfig = GuardrailPolicy & {
 
 type ViewType = 'evaluator' | 'logs';
 
-export default function Home() {
+function HomeContent() {
     const [currentView, setCurrentView] = useState<ViewType>('evaluator');
 
     const [guardrailPolicy, setGuardrailPolicy] = useState<GuardrailPolicy | null>(null);
     const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
     const [botConfig, setBotConfig] = useState<BotConfig | null>(null);
-    const [botName, _setBotName] = useState<string | null>(null);
-    const setBotName = (name: string | null) => {
-        if (name) console.log(`[Identification] Setting Bot Friendly Name: ${name}`);
-        _setBotName(name);
-    };
 
     // Tab State for Evaluator View
     const [activeTab, setActiveTab] = useState<'live' | 'batch'>('live');
@@ -52,6 +47,14 @@ export default function Home() {
     const [userId, setUserId] = useState('');
     const [koreSessionId, setKoreSessionId] = useState<string | null>(null);  // Kore's internal session ID
     const llmInspectorRef = useRef<LLMInspectorRef>(null);
+    const { showToast } = useNotification();
+    const [showRequirementsModal, setShowRequirementsModal] = useState(false);
+    const [missingRequirements, setMissingRequirements] = useState<string[]>([]);
+    const [showTooltip, setShowTooltip] = useState(false);
+
+    // Sidebar state
+    const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
+    const [isSidebarHovered, setIsSidebarHovered] = useState(false);
 
     useEffect(() => {
         // Use RedGuard- prefix so we can easily identify our interactions in Kore GenAI logs
@@ -101,6 +104,12 @@ export default function Home() {
         llmInspectorRef.current?.clearLogs();  // Clear the logs display
         setMessages([]);
         setInteraction(null);
+    };
+
+    const handleClearConsole = () => {
+        // Just clear the console display without resetting userId
+        setKoreSessionId(null);
+        setMessages([]);
     };
 
     // Auto-fetch Preview when interaction or config changes
@@ -163,6 +172,49 @@ export default function Home() {
         lastEvalInterRef.current = interaction ? { user: interaction.user, bot: interaction.bot } : null;
     }, [interaction?.user, interaction?.bot]);
 
+    const getMissingRequirements = () => {
+        const missingItems: string[] = [];
+
+        // Check for API key
+        if (!llmConfig?.apiKey) {
+            missingItems.push('Evaluation API Key - Configure your LLM provider and API key in the Evaluation Model section');
+        }
+
+        // Check if at least one guardrail is selected
+        const hasSelectedGuardrails = guardrailPolicy?.activeGuardrails && guardrailPolicy.activeGuardrails.length > 0;
+
+        if (!hasSelectedGuardrails) {
+            missingItems.push('Guardrail Selection - Enable at least one guardrail (toxicity, topics, prompt injection, or regex) in the Guardrail Configuration section');
+        }
+
+        // Check for guardrails detected in bot logs
+        const logs = llmInspectorRef.current?.getLogs() || [];
+        const hasGuardrailsInLogs = logs.length > 0 && logs.some((log: any) => {
+            const featureName = (log['Feature Name '] || log.Feature || '').toLowerCase();
+            return featureName.includes('guardrail');
+        });
+
+        if (!hasGuardrailsInLogs) {
+            missingItems.push('GenAI log from bot - A guardrail must be detected in the bot log. Send a message in the Live Verification Console that triggers a guardrail interaction with an AI component (like an Agent Node)');
+        }
+
+        return missingItems;
+    };
+
+    const canRunEvaluation = () => {
+        return getMissingRequirements().length === 0;
+    };
+
+    const handleEvaluateClick = () => {
+        const missing = getMissingRequirements();
+        if (missing.length > 0) {
+            setMissingRequirements(missing);
+            setShowRequirementsModal(true);
+        } else {
+            handleEvaluate();
+        }
+    };
+
     const handleEvaluate = async () => {
         if (!interaction || !fullGuardrailConfig) return;
         setIsEvaluating(true);
@@ -197,6 +249,12 @@ export default function Home() {
             try {
                 // Extract individual guardrail results from the results array
                 const findResult = (name: string) => {
+                    // Check if this guardrail is actually active in the configuration
+                    const isActive = guardrailPolicy?.activeGuardrails?.some((g: string) =>
+                        g.toLowerCase().includes(name.toLowerCase())
+                    );
+                    if (!isActive) return null; // Return null for inactive guardrails
+
                     if (!result.results) return null;
                     const found = result.results.find((r: any) =>
                         r.guardrail?.toLowerCase().includes(name.toLowerCase())
@@ -208,21 +266,45 @@ export default function Home() {
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
                 const currentMsg = messages.findLast(m => m.role === 'user' && m.text === interaction.user);
 
+                // Extract token usage from full API response
+                let inputTokens = null;
+                let outputTokens = null;
+                if (result.debug?.fullResponse) {
+                    try {
+                        const fullResp = typeof result.debug.fullResponse === 'string'
+                            ? JSON.parse(result.debug.fullResponse)
+                            : result.debug.fullResponse;
+
+                        // Extract from usage object (Anthropic format)
+                        if (fullResp.usage) {
+                            inputTokens = fullResp.usage.input_tokens || null;
+                            outputTokens = fullResp.usage.output_tokens || null;
+                        }
+                    } catch (e) {
+                        console.error('[Evaluation] Failed to parse fullResponse for tokens:', e);
+                    }
+                }
+
                 await fetch(`${apiUrl}/runs`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
+                        sessionId: koreSessionId || null,
                         userInput: interaction.user,
                         botResponse: interaction.bot,
                         promptSent: result.debug?.requestPayload || result.debug?.prompt || previewPrompt || '',
-                        llmOutput: result.debug?.response || '',
+                        llmOutput: result.debug?.fullResponse || result.debug?.response || '',
                         toxicityPass: findResult('toxicity'),
                         topicsPass: findResult('topics') ?? findResult('restrict'),
                         injectionPass: findResult('injection'),
                         regexPass: findResult('regex') ?? findResult('filter'),
                         overallPass: result.pass ?? false,
                         isAttack: currentMsg?.isAttack || false,
-                        totalTokens: result.totalTokens ?? interaction.result?.totalTokens ?? null
+                        inputTokens,
+                        outputTokens,
+                        totalTokens: result.totalTokens ?? interaction.result?.totalTokens ?? null,
+                        latencyMs: result.latencyMs ?? null,
+                        model: result.model ?? null
                     })
                 });
                 // Trigger run history refresh
@@ -238,7 +320,12 @@ export default function Home() {
     };
 
     const handleRequestPayloadRegen = async (prompt: string): Promise<string> => {
-        if (!interaction || !fullGuardrailConfig) throw new Error("No interaction");
+        if (!interaction) {
+            throw new Error("Please send a message in the Live Verification Console first to create a chat interaction.");
+        }
+        if (!fullGuardrailConfig) {
+            throw new Error("Please configure guardrail settings before regenerating the payload.");
+        }
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         const res = await fetch(`${apiUrl}/evaluate/preview`, {
             method: 'POST',
@@ -259,8 +346,7 @@ export default function Home() {
     };
 
     return (
-        <NotificationProvider>
-            <div className="h-screen bg-[var(--background)] flex flex-col">
+        <div className="h-screen bg-[var(--background)] flex flex-col">
                 {/* Top Navigation Bar */}
                 <nav className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-50">
                     <div className="w-full px-4 sm:px-6 lg:px-8">
@@ -272,12 +358,9 @@ export default function Home() {
                                     className="h-16 w-auto object-contain"
                                 />
                                 <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                                <span className="text-[10px] font-mono bg-gray-100 dark:bg-gray-800 text-gray-500 px-1.5 py-0.5 rounded border border-gray-200 dark:border-gray-700 mt-1">v0.1.7</span>
+                                <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.2.0</span>
                             </div>
                             <div className="flex items-center gap-4">
-                                <div className="text-xs font-mono bg-indigo-50 dark:bg-indigo-900/10 border border-indigo-100 dark:border-indigo-800 px-3 py-1.5 rounded-md text-indigo-600 dark:text-indigo-400 font-bold hidden md:block">
-                                    {botName ? `Bot: ${botName}` : (botConfig?.botId ? `Bot: ${botConfig.botId}` : 'Select a Bot to Begin')}
-                                </div>
                                 <ThemeSwitcher />
                             </div>
                         </div>
@@ -288,19 +371,47 @@ export default function Home() {
                 <div className="flex flex-1 overflow-hidden">
 
                     {/* Sidebar */}
-                    <aside className="w-64 bg-surface border-r border-border flex flex-col flex-shrink-0">
+                    <aside
+                        className={`bg-surface border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative ${
+                            isSidebarExpanded || isSidebarHovered ? 'w-64' : 'w-16'
+                        }`}
+                        onMouseEnter={() => setIsSidebarHovered(true)}
+                        onMouseLeave={() => setIsSidebarHovered(false)}
+                    >
+                        {/* Toggle Button - Vertically Centered */}
+                        <button
+                            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
+                            className="absolute top-1/2 -translate-y-1/2 right-1 p-1.5 rounded-md hover:bg-sidebar-hover text-foreground transition-all z-10 border border-[var(--border)] bg-[var(--surface)] shadow-sm"
+                            title={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                        >
+                            <svg
+                                className={`h-3.5 w-3.5 transition-transform duration-300 ${isSidebarExpanded ? 'rotate-180' : ''}`}
+                                fill="none"
+                                viewBox="0 0 24 24"
+                                stroke="currentColor"
+                            >
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            </svg>
+                        </button>
+
                         <div className="p-4 space-y-1">
+
                             <button
                                 onClick={() => setCurrentView('evaluator')}
                                 className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'evaluator'
                                     ? 'bg-sidebar-active text-sidebar-active-text'
                                     : 'text-foreground hover:bg-sidebar-hover'
                                     }`}
+                                title="Guardrail Evaluator"
                             >
-                                <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                 </svg>
-                                Guardrail Evaluator
+                                <span className={`whitespace-nowrap transition-all duration-300 ${
+                                    isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
+                                }`}>
+                                    Guardrail Evaluator
+                                </span>
                             </button>
 
                             <button
@@ -309,11 +420,16 @@ export default function Home() {
                                     ? 'bg-sidebar-active text-sidebar-active-text'
                                     : 'text-foreground hover:bg-sidebar-hover'
                                     }`}
+                                title="System Logs"
                             >
-                                <svg className="mr-3 h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 01-2-2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                                 </svg>
-                                System Logs
+                                <span className={`whitespace-nowrap transition-all duration-300 ${
+                                    isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
+                                }`}>
+                                    System Logs
+                                </span>
                             </button>
                         </div>
                     </aside>
@@ -325,13 +441,13 @@ export default function Home() {
                             <RedGuardIntro />
 
                             {/* Tab Headers */}
-                            <div className="border-b border-gray-200 dark:border-gray-700 mb-6">
+                            <div className="border-b border-[var(--border)] mb-6">
                                 <nav className="-mb-px flex space-x-8" aria-label="Tabs">
                                     <button
                                         onClick={() => setActiveTab('live')}
                                         className={`${activeTab === 'live'
-                                            ? 'border-indigo-500 text-indigo-600'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                            ? 'border-[var(--primary-500)] text-[var(--primary-600)]'
+                                            : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
                                             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                                     >
                                         Live Verification Console
@@ -339,8 +455,8 @@ export default function Home() {
                                     <button
                                         onClick={() => setActiveTab('batch')}
                                         className={`${activeTab === 'batch'
-                                            ? 'border-indigo-500 text-indigo-600'
-                                            : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
+                                            ? 'border-[var(--primary-500)] text-[var(--primary-600)]'
+                                            : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
                                             } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                                     >
                                         Batch Tester (CSV)
@@ -353,18 +469,17 @@ export default function Home() {
                                 <div className="space-y-6">
                                     {/* Row 1: Bot Config & Chat Console */}
                                     <div>
-                                        <div className="flex items-center gap-2 mb-3">
-                                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">1</span>
-                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Capture Interaction</h3>
-                                            <span className="text-xs text-gray-400">- Configure your bot and chat to generate a conversation transcript.</span>
+                                        <div className="mb-3">
+                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Setup Connection</h3>
+                                            <p className="text-xs text-[var(--foreground-muted)]">Connect your bot, chat to test responses, and generate adversarial attacks.</p>
                                         </div>
                                         <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                             <div className="col-span-4 h-full min-h-0">
                                                 <BotSettings
                                                     onConfigChange={setBotConfig}
-                                                    onBotNameUpdate={setBotName}
                                                     onConnect={handleBotConnect}
                                                     onSessionReset={handleSessionReset}
+                                                    onClearConsole={handleClearConsole}
                                                     onKoreSessionUpdate={setKoreSessionId}
                                                     userId={userId}
                                                 />
@@ -388,16 +503,14 @@ export default function Home() {
 
                                     {/* Row 2: Guardrail Config & Kore Logs */}
                                     <div>
-                                        <div className="flex items-center gap-2 mb-3 mt-2">
-                                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">2</span>
-                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Define Guardrails</h3>
-                                            <span className="text-xs text-gray-400">- Set your safety policies and inspect real-time system logs.</span>
+                                        <div className="mb-3 mt-2">
+                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Define guardrails</h3>
+                                            <p className="text-xs text-[var(--foreground-muted)]">Set your safety policies and inspect real-time system logs.</p>
                                         </div>
                                         <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                             <div className="col-span-4 h-full min-h-0">
                                                 <GuardrailSettings
                                                     onConfigChange={setGuardrailPolicy}
-                                                    onBotNameUpdate={setBotName}
                                                     onBotConfigUpdate={setBotConfig}
                                                 />
                                             </div>
@@ -409,10 +522,9 @@ export default function Home() {
 
                                     {/* Row 3: Evaluation Settings & Inspector */}
                                     <div>
-                                        <div className="flex items-center gap-2 mb-3 mt-2">
-                                            <span className="bg-indigo-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">3</span>
-                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Configure Evaluation</h3>
-                                            <span className="text-xs text-gray-400">- Choose the LLM that will judge the conversation against your guardrails.</span>
+                                        <div className="mb-3 mt-2">
+                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Test & Evaluate</h3>
+                                            <p className="text-xs text-[var(--foreground-muted)]">Use predefined guardrail prompts or create custom ones, run evaluations, and analyze results.</p>
                                         </div>
                                         <div className="grid grid-cols-12 gap-6">
                                             <div className="col-span-4">
@@ -436,30 +548,90 @@ export default function Home() {
                                     </div>
 
                                     {/* Row 4: Evaluate Button */}
-                                    <div>
-                                        <div className="flex items-center justify-center gap-2 mb-2 mt-4">
-                                            <span className="bg-emerald-600 text-white text-xs font-bold px-2 py-0.5 rounded-full">4</span>
-                                            <h3 className="text-sm font-semibold text-gray-700 dark:text-gray-300 uppercase tracking-wide">Execute</h3>
-                                        </div>
-                                        <div className="flex justify-center mb-2">
-                                            <button
-                                                onClick={handleEvaluate}
-                                                disabled={isEvaluating || !interaction || !llmConfig?.apiKey}
-                                                className="w-1/2 py-4 text-lg font-bold uppercase tracking-widest text-white bg-gradient-to-r from-emerald-600 to-green-600 hover:from-emerald-700 hover:to-green-700 rounded-lg shadow-lg hover:shadow-xl transform transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none"
+                                    <div className="relative">
+                                        <div className="flex justify-center mb-2 mt-4">
+                                            <div
+                                                className="relative inline-block"
+                                                onMouseEnter={() => !canRunEvaluation() && setShowTooltip(true)}
+                                                onMouseLeave={() => setShowTooltip(false)}
                                             >
-                                                {isEvaluating ? (
-                                                    <span className="flex items-center justify-center gap-3">
-                                                        <svg className="animate-spin h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                        </svg>
-                                                        Running Evaluation...
-                                                    </span>
-                                                ) : (
-                                                    'Perform Guardrail Evaluation'
+                                                <button
+                                                    onClick={handleEvaluateClick}
+                                                    disabled={isEvaluating || !canRunEvaluation()}
+                                                    className="px-6 py-3 text-sm font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-lg shadow-md hover:shadow-lg transform transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none disabled:bg-gray-400"
+                                                >
+                                                    {isEvaluating ? (
+                                                        <span className="flex items-center justify-center gap-2">
+                                                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                            </svg>
+                                                            Running Evaluation...
+                                                        </span>
+                                                    ) : (
+                                                        'Perform Guardrail Evaluation'
+                                                    )}
+                                                </button>
+
+                                                {/* Hover Tooltip */}
+                                                {showTooltip && !canRunEvaluation() && (
+                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 z-50 pointer-events-none">
+                                                        <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 max-w-xs whitespace-nowrap">
+                                                            <div className="font-semibold mb-2">Missing Requirements:</div>
+                                                            <ul className="space-y-1 text-left">
+                                                                {getMissingRequirements().map((req, i) => {
+                                                                    // Extract just the first part before the dash for tooltip
+                                                                    const shortReq = req.split(' - ')[0];
+                                                                    return (
+                                                                        <li key={i} className="flex items-start gap-2">
+                                                                            <span>•</span>
+                                                                            <span>{shortReq}</span>
+                                                                        </li>
+                                                                    );
+                                                                })}
+                                                            </ul>
+                                                            {/* Tooltip arrow */}
+                                                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+                                                                <div className="border-8 border-transparent border-t-gray-900"></div>
+                                                            </div>
+                                                        </div>
+                                                    </div>
                                                 )}
-                                            </button>
+                                            </div>
                                         </div>
+
+                                        {/* Requirements Modal */}
+                                        {showRequirementsModal && (
+                                            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-4 z-50">
+                                                <div className="bg-error-bg border-2 border-error-border rounded-lg shadow-xl p-6 max-w-2xl">
+                                                    <div className="flex items-start justify-between mb-4">
+                                                        <div className="flex items-center gap-2">
+                                                            <svg className="w-6 h-6 text-error-text shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                            </svg>
+                                                            <h3 className="text-lg font-semibold text-error-text">Cannot Perform Evaluation</h3>
+                                                        </div>
+                                                        <button
+                                                            onClick={() => setShowRequirementsModal(false)}
+                                                            className="text-error-text hover:text-error-text/80 transition-colors"
+                                                        >
+                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                    <div className="space-y-3">
+                                                        <p className="text-sm text-error-text font-medium mb-3">Please complete the following requirements:</p>
+                                                        {missingRequirements.map((item, i) => (
+                                                            <div key={i} className="flex gap-3 text-sm">
+                                                                <span className="text-error-text font-bold shrink-0">{i + 1}.</span>
+                                                                <p className="text-error-text">{item}</p>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        )}
                                     </div>
 
                                     {/* Row 5: History */}
@@ -494,7 +666,14 @@ export default function Home() {
                         </div>
                     </main>
                 </div>
-            </div>
+        </div>
+    );
+}
+
+export default function Home() {
+    return (
+        <NotificationProvider>
+            <HomeContent />
         </NotificationProvider>
     );
 }

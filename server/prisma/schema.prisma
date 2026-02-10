@@ -119,23 +119,49 @@ model PromptImprovement {
 
 model EvaluationRun {
   id             String   @id @default(uuid())
+  sessionId      String?  @map("session_id") // Kore.AI session ID for correlation
   userInput      String   @map("user_input")
   botResponse    String   @map("bot_response")
   promptSent     String   @map("prompt_sent")
   llmOutput      String   @map("llm_output")
-  
+
   // Pass/Fail for each guardrail category
   toxicityPass   Boolean? @map("toxicity_pass")
   topicsPass     Boolean? @map("topics_pass")
   injectionPass  Boolean? @map("injection_pass")
   regexPass      Boolean? @map("regex_pass")
-  
+
   overallPass    Boolean  @map("overall_pass")
   isAttack       Boolean  @default(false) @map("is_attack")
+
+  // Token usage
+  inputTokens    Int?     @map("input_tokens")
+  outputTokens   Int?     @map("output_tokens")
   totalTokens    Int?     @map("total_tokens")
+
+  // Performance and metadata
+  latencyMs      Int?     @map("latency_ms")
+  model          String?
+
   createdAt      DateTime @default(now()) @map("created_at")
 
   @@map("evaluation_runs")
+}
+
+model AttackMessage {
+  id             String   @id @default(uuid())
+  sessionId      String   @map("session_id") // Kore.AI session ID
+  messageContent String   @map("message_content") // The attack text
+  category       String   // Attack category: toxicity, prompt_injection, jailbreak, etc.
+  turnIndex      Int?     @map("turn_index") // Which turn in the conversation (0-indexed)
+  timestamp      DateTime @default(now())
+
+  // Optional metadata
+  botId          String?  @map("bot_id")
+  userId         String?  @map("user_id") // RedGuard user who generated the attack
+
+  @@index([sessionId])
+  @@map("attack_messages")
 }
 
 model ApiLog {

@@ -14,6 +14,7 @@ router.use('/garak', require('./garak'));
 router.use('/prompts', require('./prompts'));
 router.use('/logs', require('./logs'));
 router.use('/kore', require('./kore'));
+router.use('/attack-messages', require('./attack-messages'));
 
 router.get('/health', (req, res) => {
     res.json({ status: 'ok' });

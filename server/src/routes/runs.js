@@ -23,6 +23,7 @@ router.get('/', async (req, res) => {
 router.post('/', async (req, res) => {
     try {
         const {
+            sessionId,
             userInput,
             botResponse,
             promptSent,
@@ -33,11 +34,16 @@ router.post('/', async (req, res) => {
             regexPass,
             overallPass,
             isAttack,
-            totalTokens
+            inputTokens,
+            outputTokens,
+            totalTokens,
+            latencyMs,
+            model
         } = req.body;
 
         const run = await prisma.evaluationRun.create({
             data: {
+                sessionId: sessionId || null,
                 userInput,
                 botResponse,
                 promptSent,
@@ -48,7 +54,11 @@ router.post('/', async (req, res) => {
                 regexPass,
                 overallPass,
                 isAttack: isAttack || false,
-                totalTokens
+                inputTokens: inputTokens || null,
+                outputTokens: outputTokens || null,
+                totalTokens,
+                latencyMs: latencyMs || null,
+                model: model || null
             }
         });
 

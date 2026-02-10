@@ -146,6 +146,8 @@ class GuardrailLogic {
             results,
             result: r, // Include the full parsed LLM result for System Analysis tab
             totalTokens: judgeResult.totalTokens,
+            latencyMs: judgeResult.latencyMs,
+            model: judgeResult.model,
             debug: {
                 prompt: judgeResult.prompt,
                 response: judgeResult.rawResponse,

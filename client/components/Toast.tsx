@@ -24,15 +24,15 @@ export default function Toast({ message, type, onClose, duration = 5000 }: Toast
     }, [duration, onClose]);
 
     const typeStyles = {
-        success: 'bg-green-50 border-green-200 text-green-800',
-        error: 'bg-red-50 border-red-200 text-red-800',
-        info: 'bg-blue-50 border-blue-200 text-blue-800'
+        success: 'bg-success-bg border-success-border text-success-text shadow-lg',
+        error: 'bg-error-bg border-error-border text-error-text shadow-lg',
+        info: 'bg-info-bg border-info-border text-info-text shadow-lg'
     };
 
     const iconStyles = {
-        success: 'text-green-500',
-        error: 'text-red-500',
-        info: 'text-blue-500'
+        success: 'text-success-text',
+        error: 'text-error-text',
+        info: 'text-info-text'
     };
 
     const icons = {

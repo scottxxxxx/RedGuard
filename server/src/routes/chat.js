@@ -75,6 +75,32 @@ router.post('/connect', async (req, res) => {
         // Send the explicit ON_CONNECT event as per Kore.ai Webhook V2.0 spec
         const kResponse = await koreService.sendMessage(explicitUserId, { type: "event", val: "ON_CONNECT" }, { new: true }, botConfig);
 
+        // Try to extract bot name from response metadata
+        let botName = null;
+        let sessionId = null;
+
+        // Check various possible locations for bot metadata
+        if (kResponse.botInfo) {
+            botName = kResponse.botInfo.name || kResponse.botInfo.chatBot || kResponse.botInfo.botName;
+        }
+        if (kResponse.metadata) {
+            botName = botName || kResponse.metadata.botName || kResponse.metadata.name;
+        }
+        if (kResponse.context) {
+            botName = botName || kResponse.context.botName;
+        }
+
+        // Extract session ID
+        if (kResponse.sessionId) {
+            sessionId = kResponse.sessionId;
+        } else if (kResponse.session?.id) {
+            sessionId = kResponse.session.id;
+        }
+
+        console.log(`[Connection] Bot Name extracted: ${botName || 'Not found'}`);
+        console.log(`[Connection] Session ID: ${sessionId || 'Not found'}`);
+        console.log(`[Connection] Response keys:`, Object.keys(kResponse));
+
         await apiLogger.log({
             logType: 'kore_connect',
             method: 'POST',
@@ -87,7 +113,17 @@ router.post('/connect', async (req, res) => {
             provider: 'kore'
         });
 
-        res.json(kResponse);
+        // Add extracted metadata to response
+        const enrichedResponse = {
+            ...kResponse,
+            _metadata: {
+                botName,
+                sessionId,
+                extractedAt: new Date().toISOString()
+            }
+        };
+
+        res.json(enrichedResponse);
     } catch (error) {
         console.error("Connect Error:", error.message);
         res.status(500).json({

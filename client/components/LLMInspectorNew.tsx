@@ -147,23 +147,13 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
 
     return (
         <div className="card p-6 h-full flex flex-col">
-            <h3 className="shrink-0 text-lg font-medium text-gray-900 dark:text-white mb-4 border-b pb-2 flex justify-between items-center">
+            <h3 className="shrink-0 text-lg font-medium text-[var(--foreground)] mb-4 border-b pb-2 flex justify-between items-center">
                 <div className="flex items-center gap-2">
                     <span>Kore GenAI Logs</span>
-                    {koreSessionId && (
-                        <span className="text-xs font-mono bg-green-100 text-green-700 px-2 py-0.5 rounded" title="Kore Session ID">
-                            Session: {koreSessionId.substring(0, 8)}...
-                        </span>
-                    )}
-                    {!koreSessionId && userId && (
-                        <span className="text-xs font-mono bg-yellow-100 text-yellow-700 px-2 py-0.5 rounded">
-                            Waiting for chat...
-                        </span>
-                    )}
                 </div>
                 <div className="flex items-center gap-3">
                     {isLoading && (
-                        <span className="text-xs text-indigo-500 flex items-center gap-1">
+                        <span className="text-xs text-[var(--primary-600)] flex items-center gap-1">
                             <svg className="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24">
                                 <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
                                 <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -172,11 +162,11 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                         </span>
                     )}
                     {lastUpdated && !isLoading && (
-                        <span className="text-xs text-gray-500">
+                        <span className="text-xs text-[var(--foreground-muted)]">
                             Last updated: {lastUpdated.toLocaleTimeString()}
                         </span>
                     )}
-                    <span className="text-xs px-2 py-0.5 bg-indigo-100 text-indigo-700 rounded">
+                    <span className="text-xs px-2 py-0.5 bg-badge-blue-bg text-badge-blue-text rounded">
                         {logs.length} logs
                     </span>
 
@@ -186,67 +176,49 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
 
 
             {error && (
-                <div className="shrink-0 mb-4 p-2 bg-red-100 text-red-700 rounded text-sm whitespace-pre-wrap">
+                <div className="shrink-0 mb-4 p-2 bg-error-bg text-error-text border border-error-border rounded text-sm whitespace-pre-wrap">
                     {error}
                 </div>
             )}
 
             <div className="flex-1 h-0 overflow-auto border rounded-md relative cursor-default">
-                <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
-                    <thead className="bg-gray-50 dark:bg-gray-900 sticky top-0">
+                <table className="min-w-full divide-y divide-[var(--border)]">
+                    <thead className="bg-[var(--surface-hover)] sticky top-0">
                         <tr>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Timestamp</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Category</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Activity</th>
-                            <th className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">Model</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Timestamp</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Category</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Activity</th>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Model</th>
                         </tr>
                     </thead>
-                    <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                    <tbody className="bg-[var(--surface)] divide-y divide-[var(--border)]">
                         {logs.map((log: any, i: number) => {
-                            const rawFeature = log['Feature Name '] || log.Feature || '';
-                            const isGuardrail = rawFeature.toLowerCase().includes('guardrail');
-                            const isInput = rawFeature.toLowerCase().includes('input');
-                            const isOutput = rawFeature.toLowerCase().includes('output');
-
-                            // Determine Category (The Badge)
-                            let category = isGuardrail
-                                ? (isInput ? 'Guardrail (In)' : isOutput ? 'Guardrail (Out)' : 'Guardrail')
-                                : 'GenAI Node';
-
-                            // Determine Activity Name (The "Normalized" Description)
-                            // If it's a guardrail, the description usually contains the node name it's guarding.
-                            // If it's not a guardrail, the feature name itself is usually the node type.
-                            let activityName = isGuardrail ? (log.Description || rawFeature) : (rawFeature || log.Description || '-');
-
-                            // Clean up redundant prefixes
-                            activityName = activityName
-                                .replace(/^Guardrails - /i, '')
-                                .replace(/^Guardrails- /i, '')
-                                .replace(/^Guardrail - /i, '');
-
-                            const model = log['Model Name'] || log.Model || '-';
+                            const feature = log['Feature Name '] || log.Feature || '-';
+                            const description = log.Description || '-';
+                            const model = log.Integration || log['Model Name'] || log.Model || '-';
+                            const isGuardrail = feature.toLowerCase().includes('guardrail');
 
                             return (
                                 <tr
                                     key={i}
                                     onClick={() => setSelectedLog(log)}
-                                    className="hover:bg-gray-50 dark:hover:bg-gray-700 cursor-pointer transition-colors"
+                                    className="hover:bg-[var(--surface-hover)] cursor-pointer transition-colors"
                                 >
-                                    <td className="px-3 py-2 text-sm text-gray-900 dark:text-white whitespace-nowrap">
+                                    <td className="px-3 py-2 text-sm text-[var(--foreground)] whitespace-nowrap">
                                         {log['start Date'] ? new Date(log['start Date']).toLocaleTimeString() : '-'}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-gray-900 dark:text-white">
+                                    <td className="px-3 py-2 text-sm text-[var(--foreground)]">
                                         <span className={`px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider ${isGuardrail
-                                            ? 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300'
-                                            : 'bg-indigo-100 text-indigo-800 dark:bg-indigo-900/30 dark:text-indigo-300'
+                                            ? 'bg-badge-orange-bg text-badge-orange-text'
+                                            : 'bg-badge-blue-bg text-badge-blue-text'
                                             }`}>
-                                            {category}
+                                            {feature}
                                         </span>
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-gray-700 dark:text-gray-300 max-w-[3000px] font-medium" title={log.Description}>
-                                        {activityName}
+                                    <td className="px-3 py-2 text-sm text-[var(--foreground-secondary)] max-w-[3000px] font-medium" title={description}>
+                                        {description}
                                     </td>
-                                    <td className="px-3 py-2 text-sm text-gray-500 dark:text-gray-400 font-mono text-[11px]">
+                                    <td className="px-3 py-2 text-sm text-[var(--foreground-muted)] font-mono text-[11px]">
                                         {model}
                                     </td>
                                 </tr>
@@ -255,18 +227,18 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                     </tbody>
                 </table>
                 {logs.length === 0 && !isLoading && !error && (
-                    <div className="p-8 text-center text-gray-500">
+                    <div className="p-8 text-center text-[var(--foreground-muted)]">
                         {koreSessionId ? (
                             <>
                                 <p>No logs found for this session yet.</p>
                                 {isPolling ? (
-                                    <p className="text-xs mt-2 text-blue-600 animate-pulse">Checking for new logs...</p>
+                                    <p className="text-xs mt-2 text-[var(--primary-600)] animate-pulse">Checking for new logs...</p>
                                 ) : (
                                     <>
 
                                         <button
                                             onClick={startPolling}
-                                            className="mt-3 text-xs bg-indigo-50 text-indigo-600 px-3 py-1 rounded border border-indigo-200 hover:bg-indigo-100"
+                                            className="mt-3 text-xs bg-[var(--primary-50)] text-[var(--primary-600)] px-3 py-1 rounded border border-[var(--primary-200)] hover:bg-[var(--primary-100)]"
                                         >
                                             Start Auto-Polling
                                         </button>
@@ -286,20 +258,20 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
             {/* Modal for details */}
             {selectedLog && (
                 <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
-                    <div className="bg-white dark:bg-gray-800 rounded-lg shadow-xl w-full max-w-5xl h-[85vh] flex flex-col">
-                        <div className="p-4 border-b flex justify-between items-center bg-gray-50 dark:bg-gray-900 rounded-t-lg">
+                    <div className="bg-[var(--surface)] rounded-lg shadow-xl w-full max-w-5xl h-[85vh] flex flex-col">
+                        <div className="p-4 border-b flex justify-between items-center bg-[var(--surface-hover)] rounded-t-lg">
                             <div>
-                                <h3 className="text-lg font-medium text-gray-900 dark:text-white">Log Details</h3>
-                                <p className="text-xs text-gray-500">{new Date(selectedLog['start Date']).toLocaleString()}</p>
+                                <h3 className="text-lg font-medium text-[var(--foreground)]">Log Details</h3>
+                                <p className="text-xs text-[var(--foreground-muted)]">{new Date(selectedLog['start Date']).toLocaleString()}</p>
                             </div>
-                            <button onClick={() => setSelectedLog(null)} className="text-gray-500 hover:text-gray-700 p-2 text-2xl">&times;</button>
+                            <button onClick={() => setSelectedLog(null)} className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl">&times;</button>
                         </div>
                         <div className="flex-1 overflow-auto p-6 space-y-6">
 
-                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-gray-50 dark:bg-gray-900 p-4 rounded-lg">
+                            <div className="grid grid-cols-2 md:grid-cols-3 gap-4 bg-[var(--surface-hover)] p-4 rounded-lg">
                                 <div className="col-span-2 md:col-span-3">
-                                    <span className="block text-xs text-gray-500 uppercase">Activity</span>
-                                    <span className="font-medium text-lg">
+                                    <span className="block text-xs text-[var(--foreground-muted)] uppercase">Activity</span>
+                                    <span className="font-medium text-lg text-[var(--foreground)]">
                                         {(selectedLog.Description || selectedLog['Feature Name '] || selectedLog.Feature || '-')
                                             .replace(/^Guardrails - /i, '')
                                             .replace(/^Guardrails- /i, '')
@@ -307,27 +279,27 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                                         }
                                     </span>
                                 </div>
-                                <div><span className="block text-xs text-gray-500 uppercase">Feature</span> <span className="font-medium">{selectedLog['Feature Name '] || selectedLog.Feature}</span></div>
-                                <div><span className="block text-xs text-gray-500 uppercase">Status</span> <span className="font-medium text-green-600">{selectedLog.Status || 'Success'}</span></div>
-                                <div><span className="block text-xs text-gray-500 uppercase">Model</span> <span className="font-medium">{selectedLog['Model Name'] || selectedLog.Model || '-'}</span></div>
-                                <div><span className="block text-xs text-gray-500 uppercase">Time Taken</span> <span className="font-medium">{selectedLog['Time Taken']}ms</span></div>
-                                <div><span className="block text-xs text-gray-500 uppercase">Session ID</span> <span className="font-medium font-mono text-xs">{selectedLog['Session ID'] || '-'}</span></div>
+                                <div><span className="block text-xs text-[var(--foreground-muted)] uppercase">Feature</span> <span className="font-medium text-[var(--foreground)]">{selectedLog['Feature Name '] || selectedLog.Feature}</span></div>
+                                <div><span className="block text-xs text-[var(--foreground-muted)] uppercase">Status</span> <span className="font-medium text-success-text">{selectedLog.Status || 'Success'}</span></div>
+                                <div><span className="block text-xs text-[var(--foreground-muted)] uppercase">Model</span> <span className="font-medium text-[var(--foreground)]">{selectedLog.Integration || selectedLog['Model Name'] || selectedLog.Model || '-'}</span></div>
+                                <div><span className="block text-xs text-[var(--foreground-muted)] uppercase">Time Taken</span> <span className="font-medium text-[var(--foreground)]">{selectedLog['Time Taken']}ms</span></div>
+                                <div><span className="block text-xs text-[var(--foreground-muted)] uppercase">Session ID</span> <span className="font-medium font-mono text-xs text-[var(--foreground)]">{selectedLog['Session ID'] || '-'}</span></div>
                             </div>
 
                             <div>
-                                <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center gap-2">
                                     <span>📤 Request Payload (Sent to LLM)</span>
                                 </h4>
-                                <pre className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[400px] border border-gray-200 dark:border-gray-700 shadow-inner language-json">
+                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[400px] border border-gray-700 shadow-inner language-json">
                                     {JSON.stringify(selectedLog['Payload Details']?.['Request Payload'] || selectedLog['Request Payload'], null, 2)}
                                 </pre>
                             </div>
 
                             <div>
-                                <h4 className="font-medium text-sm text-gray-700 dark:text-gray-300 mb-2 flex items-center gap-2">
+                                <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center gap-2">
                                     <span>📥 Response Payload (From LLM)</span>
                                 </h4>
-                                <pre className="bg-gray-100 dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[300px] border border-gray-200 dark:border-gray-700 shadow-inner language-json">
+                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[300px] border border-gray-700 shadow-inner language-json">
                                     {JSON.stringify(selectedLog['Payload Details']?.['Response Payload'] || selectedLog['Response Payload'], null, 2)}
                                 </pre>
                             </div>

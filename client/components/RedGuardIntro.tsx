@@ -69,15 +69,15 @@ const RedGuardIntro = () => {
                     className={`text-center mb-12 transition-all duration-700 ease-out-expo ${visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-4"
                         }`}
                 >
-                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight text-gray-900 dark:text-white mb-6">
+                    <h1 className="text-4xl md:text-5xl font-bold tracking-tight mb-6 text-[var(--foreground)]">
                         Test, verify, and harden your bot's{" "}
-                        <span className="text-indigo-600 dark:text-indigo-400">
+                        <span className="text-[var(--primary-600)]">
                             AI safety guardrails.
                         </span>
                     </h1>
 
-                    <p className="text-lg text-gray-500 dark:text-gray-400 max-w-2xl mx-auto mb-8 font-normal leading-relaxed">
-                        Chat with your bot in a live session while an AI judge evaluates every
+                    <p className="text-lg text-[var(--foreground-muted)] max-w-2xl mx-auto mb-8 font-normal leading-relaxed">
+                        Chat with your bot in a live session, then have an AI judge evaluate every
                         response against your configured guardrail policies, catching what
                         passed, what failed, and what's missing.
                     </p>
@@ -128,29 +128,34 @@ const RedGuardIntro = () => {
                                 key={step.number}
                                 onClick={() => setActiveStep(i)}
                                 className={`relative p-6 rounded-2xl cursor-pointer transition-all duration-500 group border-2 ${isActive
-                                    ? "bg-white dark:bg-gray-800 border-indigo-500 shadow-xl shadow-indigo-500/10"
-                                    : "bg-white/50 dark:bg-gray-900/50 border-gray-100 dark:border-gray-800 hover:border-indigo-200 dark:hover:border-indigo-900"
+                                    ? "bg-[var(--surface)] border-[var(--primary-600)] shadow-lg shadow-blue-500/10 dark:shadow-blue-500/20"
+                                    : "bg-[var(--surface)] border-[var(--border)] hover:border-blue-200 dark:hover:border-blue-800"
                                     }`}
                             >
                                 {/* Top accent bar */}
                                 <div
-                                    className={`absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 ${isActive ? "opacity-100" : "opacity-0 group-hover:opacity-30"
-                                        }`}
+                                    className={`absolute top-0 left-0 right-0 h-1 rounded-b-lg transition-all duration-500 ${
+                                        isActive
+                                            ? "opacity-100 bg-gradient-to-r from-transparent via-[var(--primary-600)] to-transparent shadow-[0_1px_8px_rgba(79,70,229,0.5)]"
+                                            : "opacity-0 group-hover:opacity-30 bg-gradient-to-r from-transparent via-[var(--primary-400)] to-transparent"
+                                    }`}
                                 />
 
                                 {/* Header: Icon + Number */}
                                 <div className="flex items-center justify-between mb-5">
                                     <div
-                                        className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-500 ${isActive
-                                            ? "bg-indigo-600 text-white shadow-lg shadow-indigo-500/30"
-                                            : "bg-gray-100 dark:bg-gray-800 text-gray-400"
-                                            }`}
+                                        className={`w-10 h-10 flex items-center justify-center rounded-xl transition-all duration-500 ${
+                                            isActive
+                                                ? "bg-[var(--primary-600)] text-white shadow-md shadow-blue-400/30 dark:shadow-blue-400/40"
+                                                : "bg-[var(--surface-hover)] text-[var(--foreground-muted)]"
+                                        }`}
                                     >
                                         {step.icon}
                                     </div>
                                     <span
-                                        className={`font-mono text-xs font-bold tracking-wider ${isActive ? "text-indigo-500" : "text-gray-300 dark:text-gray-600"
-                                            }`}
+                                        className={`font-mono text-xs font-bold tracking-wider transition-colors duration-500 ${
+                                            isActive ? "text-[var(--primary-600)]" : "text-[var(--foreground-muted)]"
+                                        }`}
                                     >
                                         {step.number}
                                     </span>
@@ -158,24 +163,27 @@ const RedGuardIntro = () => {
 
                                 {/* Body */}
                                 <h3
-                                    className={`text-lg font-bold mb-2 transition-colors duration-500 ${isActive ? "text-gray-900 dark:text-white" : "text-gray-500 dark:text-gray-400"
-                                        }`}
+                                    className={`text-lg font-bold mb-2 transition-colors duration-500 ${
+                                        isActive ? "text-[var(--foreground)] font-extrabold" : "text-[var(--foreground-muted)]"
+                                    }`}
                                 >
                                     {step.title}
                                 </h3>
                                 <p
-                                    className={`text-sm leading-relaxed mb-6 transition-colors duration-500 ${isActive ? "text-gray-600 dark:text-gray-300" : "text-gray-400 dark:text-gray-500"
-                                        }`}
+                                    className={`text-sm leading-relaxed mb-6 transition-colors duration-500 ${
+                                        isActive ? "text-[var(--foreground-secondary)]" : "text-[var(--foreground-muted)]"
+                                    }`}
                                 >
                                     {step.description}
                                 </p>
 
                                 {/* Footer: Meta */}
                                 <div
-                                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-tight transition-all duration-500 ${isActive
-                                        ? "bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800"
-                                        : "bg-gray-50 dark:bg-gray-800/50 text-gray-400 border border-transparent"
-                                        }`}
+                                    className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-lg text-[10px] font-mono font-bold tracking-tight transition-all duration-500 ${
+                                        isActive
+                                            ? "bg-blue-50 dark:bg-blue-950 text-blue-600 dark:text-blue-400 border border-blue-100 dark:border-blue-800"
+                                            : "bg-[var(--surface-hover)] text-[var(--foreground-muted)] border border-transparent"
+                                    }`}
                                 >
                                     <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                                         <path d="M7 17l9.2-9.2M17 17V7H7" />
@@ -215,7 +223,7 @@ const RedGuardIntro = () => {
 
                 {/* Footer Tagline */}
                 <div
-                    className={`text-center mt-8 text-[11px] font-mono text-gray-300 dark:text-gray-600 tracking-wide transition-opacity duration-600 delay-700 ${visible ? "opacity-100" : "opacity-0"
+                    className={`text-center mt-8 text-[11px] font-mono text-[var(--foreground-muted)] tracking-wide transition-opacity duration-600 delay-700 ${visible ? "opacity-100" : "opacity-0"
                         }`}
                 >
                     Guardrails are evaluated strictly against their configured rules, configuration recommendations are provided separately.

@@ -190,6 +190,56 @@ pip install garak requests pyjwt
 - **Styling**: Tailwind CSS with dark mode support
 - **Database**: SQLite via Prisma ORM (file: `server/dev.db`)
 
+## 📚 Documentation
+
+RedGuard maintains comprehensive documentation to support development, deployment, and operations.
+
+### Core Documentation
+
+| Document | Purpose | Audience |
+|----------|---------|----------|
+| **[README.md](./README.md)** (this file) | Project overview, architecture, quick start | Everyone |
+| **[DEPLOYMENT.md](./DEPLOYMENT.md)** | Production deployment guide, GitHub Actions, GCP | DevOps, Developers |
+| **[LOCAL_DEV_GUIDE.md](./LOCAL_DEV_GUIDE.md)** | Local development setup | Developers |
+| **[CONTRIBUTING.md](./CONTRIBUTING.md)** | Contribution guidelines, standards | Contributors, External teams |
+
+### Technical Guides
+
+| Document | Purpose |
+|----------|---------|
+| **[koreai_curl_test_guide.md](./koreai_curl_test_guide.md)** | Testing Kore.AI API with curl |
+| **[koreai_llm_prompt_inspection_guide.md](./koreai_llm_prompt_inspection_guide.md)** | Inspecting LLM prompts in Kore.AI |
+| **[guardrail_evaluation_prompt_v3.md](./guardrail_evaluation_prompt_v3.md)** | Evaluation prompt templates |
+
+### Quick Links
+
+- **Deploy to Production**: See [DEPLOYMENT.md](./DEPLOYMENT.md#quick-start)
+- **Setup Local Dev**: See [LOCAL_DEV_GUIDE.md](./LOCAL_DEV_GUIDE.md)
+- **Report Issues**: See [CONTRIBUTING.md](./CONTRIBUTING.md#reporting-issues)
+- **API Reference**: See [API Documentation](#api-documentation) below
+
+---
+
+## For External Collaborators
+
+If you're working with RedGuard (Google, Antigravity, contractors):
+
+1. **Start here**: Read this README completely
+2. **Development**: Follow [LOCAL_DEV_GUIDE.md](./LOCAL_DEV_GUIDE.md)
+3. **Contributing**: Read [CONTRIBUTING.md](./CONTRIBUTING.md) for standards
+4. **Deployment**: Never deploy without reading [DEPLOYMENT.md](./DEPLOYMENT.md)
+5. **Questions**: Check docs first, then create GitHub issue
+
+**⚠️ Important**: Always reference documentation in:
+- Pull requests
+- Issues
+- Code comments
+- Commit messages
+
+Example: `"Fixes deployment issue - see DEPLOYMENT.md#troubleshooting"`
+
+---
+
 ## License
 
 Internal use only.

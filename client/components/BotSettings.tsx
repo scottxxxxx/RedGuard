@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
+import { useNotification } from '../context/NotificationContext';
 
 export type BotConfig = {
     clientId: string;
@@ -13,20 +14,21 @@ export type BotConfig = {
 
 interface Props {
     onConfigChange: (config: BotConfig) => void;
-    onBotNameUpdate?: (name: string | null) => void;
     onConnect?: (botGreeting: string) => void;
     onSessionReset?: () => void;
+    onClearConsole?: () => void;
     onKoreSessionUpdate?: (sessionId: string) => void;
     userId?: string;
 }
 
-export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect, onSessionReset, onKoreSessionUpdate, userId }: Props) {
+export default function BotSettings({ onConfigChange, onConnect, onSessionReset, onClearConsole, onKoreSessionUpdate, userId }: Props) {
+    const { showToast } = useNotification();
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
         clientId: '***REMOVED_KORE_CLIENT_ID***',
         clientSecret: '***REMOVED_SECRET***',
-        botId: '***REMOVED_KORE_BOT_ID***',
-        webhookUrl: 'https://platform.kore.ai/chatbot/v2/webhook/***REMOVED_KORE_BOT_ID***',
+        botId: '',
+        webhookUrl: 'https://platform.kore.ai/chatbot/v2/webhook/',
         host: 'platform.kore.ai',
         inspectorClientId: '',
         inspectorClientSecret: ''
@@ -36,30 +38,38 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
     const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [validationMessage, setValidationMessage] = useState<string | null>(null);
 
+    // Force reset validation state on mount to prevent stuck spinner
+    useEffect(() => {
+        setIsValidating(false);
+    }, []);
+
     const initializeChat = async (currentConfig: BotConfig) => {
-        try {
-            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
-            const res = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    botConfig: currentConfig,
-                    userId: userId || `RedGuard-init-${Math.random().toString(36).substring(7)}`
-                })
-            });
+        const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
+        const res = await fetch(apiUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                botConfig: currentConfig,
+                userId: userId || `RedGuard-init-${Math.random().toString(36).substring(7)}`
+            })
+        });
 
-            const data = await res.json();
+        if (!res.ok) {
+            const errorData = await res.json().catch(() => ({ error: 'Connection failed' }));
+            throw new Error(errorData.error || `Failed to connect (HTTP ${res.status})`);
+        }
 
-            // Extract Kore session ID from connection response
-            if (data.sessionId && onKoreSessionUpdate) {
-                onKoreSessionUpdate(data.sessionId);
-            }
+        const data = await res.json();
 
-            if (res.ok && data.data?.[0]?.val && onConnect) {
-                onConnect(data.data[0].val);
-            }
-        } catch (err) {
-            console.warn("Failed to get initial bot greeting:", err);
+        // Extract session ID from connection response
+        if (data._metadata?.sessionId && onKoreSessionUpdate) {
+            onKoreSessionUpdate(data._metadata.sessionId);
+        } else if (data.sessionId && onKoreSessionUpdate) {
+            onKoreSessionUpdate(data.sessionId);
+        }
+
+        if (data.data?.[0]?.val && onConnect) {
+            onConnect(data.data[0].val);
         }
     };
 
@@ -68,6 +78,14 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
 
         setValidationStatus('idle');
         setValidationMessage(null);
+
+        // Validate Bot ID matches webhook URL
+        if (currentConfig.webhookUrl && !currentConfig.webhookUrl.includes(currentConfig.botId)) {
+            setValidationStatus('error');
+            const errorMsg = 'Bot ID mismatch: The Bot ID does not match the ID in the Webhook URL';
+            setValidationMessage(errorMsg);
+            throw new Error(errorMsg);
+        }
 
         try {
             const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/validate`;
@@ -78,13 +96,30 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             });
 
             const data = await res.json();
-            if (!res.ok) throw new Error(data.error || 'Validation failed');
+            if (!res.ok) {
+                // Provide more specific error based on status code
+                if (res.status === 401) {
+                    throw new Error('401 Unauthorized - Invalid credentials');
+                } else if (res.status === 404) {
+                    throw new Error('404 Not Found - Bot does not exist');
+                } else if (res.status === 403) {
+                    throw new Error('403 Forbidden - Insufficient permissions');
+                } else if (res.status === 503) {
+                    throw new Error('503 Service Unavailable - ' + (data.error || 'Cannot reach webhook URL'));
+                } else if (res.status === 500) {
+                    throw new Error('500 Server Error - ' + (data.error || 'Webhook validation failed'));
+                } else {
+                    throw new Error(data.error || `Validation failed (${res.status})`);
+                }
+            }
 
             setValidationStatus('success');
             setValidationMessage('Connection validated successfully');
         } catch (err: any) {
             setValidationStatus('error');
-            setValidationMessage(err.message);
+            const errorMessage = err.message || 'Unknown validation error';
+            setValidationMessage(errorMessage);
+            throw err; // Re-throw to be caught by parent error handler
         }
     };
 
@@ -96,24 +131,26 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 const parsed = JSON.parse(savedConfig);
                 const merged = { ...config, ...parsed };
                 setConfig(merged);
-                // Try to validate on load if we have full config
-                if (merged.botId && merged.clientId && merged.clientSecret) {
-                    setIsValidating(true);
-                    validateConnection(merged).finally(() => setIsValidating(false));
-                }
+                // Don't auto-validate on mount, let user click the button
             } catch (e) {
                 console.error("Failed to parse saved bot config", e);
             }
         }
-    }, [onBotNameUpdate]);
+    }, []); // Empty dependency array - only run once on mount
 
     // Trigger greeting when userId changes (e.g. on session reset)
+    // Only run if userId is explicitly set (not undefined or empty)
     useEffect(() => {
-        if (userId && config.botId && config.clientId && config.clientSecret) {
-            setIsValidating(true);
-            initializeChat(config).finally(() => setIsValidating(false));
+        if (userId && userId !== '' && config.botId && config.clientId && config.clientSecret) {
+            // Use a small delay to avoid race conditions with the button handler
+            const timer = setTimeout(() => {
+                initializeChat(config).catch(err => {
+                    console.error('[BotSettings] Auto-connect failed:', err);
+                });
+            }, 100);
+            return () => clearTimeout(timer);
         }
-    }, [userId]);
+    }, [userId]); // Only depend on userId changes
 
     // Save to localStorage when config changes
     useEffect(() => {
@@ -122,16 +159,49 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
     }, [config, onConfigChange]);
 
     const handleChange = (key: keyof BotConfig, value: string) => {
-        setConfig(prev => ({ ...prev, [key]: value }));
+        setConfig(prev => {
+            const updated = { ...prev, [key]: value };
+
+            // Workflow 1: If webhook URL changes, extract Bot ID from it
+            if (key === 'webhookUrl') {
+                const botIdMatch = value.match(/\/webhook\/([a-z0-9-]+)$/i);
+                if (botIdMatch) {
+                    // Complete URL with Bot ID - extract it
+                    updated.botId = botIdMatch[1];
+                } else if (!value.endsWith('/webhook/')) {
+                    // URL changed but doesn't end properly - keep existing Bot ID
+                    // This handles partial edits
+                }
+            }
+
+            // Workflow 2: If Bot ID changes and webhook ends with /webhook/, append Bot ID
+            if (key === 'botId' && value) {
+                if (prev.webhookUrl.endsWith('/webhook/')) {
+                    // Base URL without Bot ID - append it
+                    updated.webhookUrl = prev.webhookUrl + value;
+                } else {
+                    // URL already has a Bot ID - replace it
+                    const baseUrl = prev.webhookUrl.replace(/\/webhook\/[a-z0-9-]*$/i, '/webhook/');
+                    updated.webhookUrl = baseUrl + value;
+                }
+            }
+
+            return updated;
+        });
     };
+
+    // Check if Bot ID is inferred from webhook URL (URL has Bot ID already)
+    const botIdFromWebhook = config.webhookUrl.match(/\/webhook\/([a-z0-9-]+)$/i)?.[1];
+    const webhookIsIncomplete = config.webhookUrl.endsWith('/webhook/');
+    const isBotIdInferred = !!botIdFromWebhook && botIdFromWebhook === config.botId && !webhookIsIncomplete;
 
     return (
         <div className="card p-5 h-full">
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[var(--border)]">
                 <div className="w-6 h-6 rounded-md bg-[var(--primary-50)] flex items-center justify-center">
-                    <svg className="w-4 h-4 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                    <svg className="w-4 h-4 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71" />
+                        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71" />
                     </svg>
                 </div>
                 <div className="flex-1">
@@ -142,7 +212,7 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
             </div>
 
             {validationMessage && (
-                <div className={`mb-4 p-2 rounded text-[11px] flex items-start gap-2 ${validationStatus === 'success' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-red-50 text-red-700 border border-red-100'
+                <div className={`mb-4 p-2 rounded text-[11px] flex items-start gap-2 ${validationStatus === 'success' ? 'bg-success-bg text-success-text border border-success-border' : 'bg-error-bg text-error-text border border-error-border'
                     }`}>
                     <svg className="w-3.5 h-3.5 shrink-0 mt-0.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                         {validationStatus === 'success' ? (
@@ -208,42 +278,172 @@ export default function BotSettings({ onConfigChange, onBotNameUpdate, onConnect
                 </div>
 
                 <div>
-                    <label className="block text-xs font-medium text-[var(--foreground-muted)] mb-1.5">Bot ID</label>
+                    <label className="block text-xs font-medium text-[var(--foreground-muted)] mb-1.5">
+                        Bot ID
+                        {isBotIdInferred && (
+                            <span className="ml-2 text-[10px] text-[var(--foreground-muted)] font-normal italic">
+                                (inferred from webhook URL)
+                            </span>
+                        )}
+                    </label>
                     <input
                         type="text"
                         value={config.botId}
                         onChange={(e) => handleChange('botId', e.target.value)}
-                        className="input w-full text-sm font-mono text-[var(--foreground)]"
+                        disabled={isBotIdInferred}
+                        placeholder={webhookIsIncomplete ? "Enter Bot ID (e.g., st-abc123...)" : ""}
+                        className={`input w-full text-sm font-mono ${isBotIdInferred ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed' : 'text-[var(--foreground)]'}`}
                     />
+                    {webhookIsIncomplete && !config.botId && (
+                        <p className="text-[10px] text-[var(--foreground-muted)] mt-1">
+                            Enter your Bot ID or paste the complete webhook URL above
+                        </p>
+                    )}
                 </div>
             </div>
 
             <div className="mt-5 pt-4 border-t border-[var(--border)]">
                 <button
                     onClick={async () => {
+                        // Validate that webhook URL is complete before attempting connection
+                        if (config.webhookUrl.endsWith('/webhook/')) {
+                            showToast(
+                                'Incomplete webhook URL.\n\n' +
+                                'Please provide a Bot ID or paste the complete webhook URL.',
+                                'error'
+                            );
+                            return;
+                        }
+
+                        // Clear console immediately when user clicks Connect
+                        // This just clears messages and session ID, not userId
+                        if (onClearConsole) onClearConsole();
+
                         setIsValidating(true);
+                        // Safety timeout to ensure button always resets
+                        const timeout = setTimeout(() => {
+                            console.warn('[BotSettings] Connection timeout - resetting button');
+                            setIsValidating(false);
+                        }, 10000); // 10 second timeout
+
                         try {
-                            if (onSessionReset) onSessionReset();
+                            // Validate first (fast, fails early on config errors)
                             await validateConnection(config);
-                            await initializeChat(config);
+
+                            // Then initialize chat (slower, but only if validation passed)
+                            await Promise.race([
+                                initializeChat(config),
+                                new Promise((_, reject) =>
+                                    setTimeout(() => reject(new Error('Connection timeout')), 15000)
+                                )
+                            ]);
+                        } catch (err: any) {
+                            console.error('[BotSettings] Connection error:', err);
+
+                            // Provide specific error messages with troubleshooting guidance
+                            if (err?.message?.includes('Bot ID mismatch')) {
+                                showToast(
+                                    'Bot ID mismatch detected.\n\n' +
+                                    'The Bot ID you entered does not match the Bot ID in the Webhook URL.\n\n' +
+                                    'Please ensure:\n' +
+                                    '• Bot ID matches the ID at the end of the Webhook URL\n' +
+                                    '• Both values are from the same bot in Kore.ai',
+                                    'error'
+                                );
+                            } else if (err?.message === 'Connection timeout') {
+                                showToast(
+                                    'Connection timed out after 15 seconds. This usually means:\n' +
+                                    '• Network connectivity issues\n' +
+                                    '• Bot is not responding\n' +
+                                    '• Webhook URL is incorrect\n\n' +
+                                    'Please verify your credentials and try again.',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
+                                showToast(
+                                    'Authentication failed (401 Unauthorized).\n\n' +
+                                    'Troubleshooting:\n' +
+                                    '• Verify Client ID and Client Secret are correct\n' +
+                                    '• Check if credentials have expired\n' +
+                                    '• Ensure the bot is published',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('404') || err?.message?.includes('Not Found')) {
+                                showToast(
+                                    'Bot not found (404).\n\n' +
+                                    'Troubleshooting:\n' +
+                                    '• Verify the Bot ID is correct\n' +
+                                    '• Check if the bot exists in your Kore.ai workspace\n' +
+                                    '• Ensure the bot is published',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('Failed to fetch') || err?.message?.includes('NetworkError')) {
+                                showToast(
+                                    'Network error - cannot reach Kore.ai platform.\n\n' +
+                                    'Troubleshooting:\n' +
+                                    '• Check your internet connection\n' +
+                                    '• Verify firewall/proxy settings\n' +
+                                    '• Kore.ai platform might be temporarily unavailable',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('CORS')) {
+                                showToast(
+                                    'CORS error - webhook configuration issue.\n\n' +
+                                    'Troubleshooting:\n' +
+                                    '• Enable webhook in Kore.ai bot settings\n' +
+                                    '• Check webhook URL configuration\n' +
+                                    '• Verify bot is published with webhook enabled',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('503') || err?.message?.includes('Service Unavailable')) {
+                                showToast(
+                                    'Webhook URL is unreachable.\n\n' +
+                                    'Troubleshooting:\n' +
+                                    '• Check if the webhook URL is correct\n' +
+                                    '• Verify the hostname is valid\n' +
+                                    '• Check your network connection\n' +
+                                    '• Ensure the Kore.ai platform is accessible',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('500') || err?.message?.includes('Server Error')) {
+                                showToast(
+                                    'Webhook validation failed.\n\n' +
+                                    'Troubleshooting:\n' +
+                                    '• Verify the webhook URL format is correct\n' +
+                                    '• Check if the bot webhook is enabled\n' +
+                                    '• Ensure the Bot ID in the URL matches your configuration\n' +
+                                    '• Try the connection again in a few moments',
+                                    'error'
+                                );
+                            } else {
+                                showToast(
+                                    `Connection failed: ${err?.message || 'Unknown error'}\n\n` +
+                                    'Please check:\n' +
+                                    '• Bot credentials are correct\n' +
+                                    '• Bot is published and active\n' +
+                                    '• Webhook is enabled in bot settings',
+                                    'error'
+                                );
+                            }
                         } finally {
+                            clearTimeout(timeout);
                             setIsValidating(false);
                         }
                     }}
-                    disabled={isValidating}
-                    className="w-full flex items-center justify-center gap-2 px-4 py-2 text-xs font-semibold bg-indigo-50 hover:bg-indigo-100 dark:bg-indigo-900/20 dark:hover:bg-indigo-900/40 text-indigo-600 dark:text-indigo-400 border border-indigo-100 dark:border-indigo-800 rounded-lg transition-all hover:shadow-sm disabled:opacity-70 disabled:cursor-not-allowed"
+                    disabled={isValidating || webhookIsIncomplete}
+                    className="w-full flex items-center justify-center gap-1.5 px-3 py-1.5 text-xs font-medium text-indigo-600 dark:text-indigo-400 hover:text-indigo-700 dark:hover:text-indigo-300 border border-gray-300 dark:border-gray-700 hover:border-indigo-400 dark:hover:border-indigo-600 rounded transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                     {isValidating ? (
-                        <svg className="animate-spin h-3.5 w-3.5" viewBox="0 0 24 24">
+                        <svg className="animate-spin h-3 w-3" viewBox="0 0 24 24">
                             <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none"></circle>
                             <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                         </svg>
                     ) : (
-                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     )}
-                    Test Bot Connection
+                    Connect
                 </button>
             </div>
         </div>

@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 
 interface EvaluationRun {
     id: string;
+    sessionId?: string | null;
     userInput: string;
     botResponse: string;
     promptSent: string;
@@ -13,16 +14,31 @@ interface EvaluationRun {
     regexPass: boolean | null | string;
     overallPass: boolean;
     isAttack: boolean;
+    inputTokens?: number | null;
+    outputTokens?: number | null;
     totalTokens?: number;
+    latencyMs?: number | null;
+    model?: string | null;
     createdAt: string;
 }
 
+interface AttackMessage {
+    id: string;
+    sessionId: string;
+    messageContent: string;
+    category: string;
+    turnIndex: number | null;
+    timestamp: string;
+}
+
 const PassFailBadge = ({ pass }: { pass: boolean | null | string }) => {
-    if (pass === null || pass === 'N/A') return <span className="text-gray-400 text-xs">N/A</span>;
+    if (pass === null || pass === 'N/A') return (
+        <span className="px-2 py-0.5 text-xs font-medium rounded-full" style={{ backgroundColor: 'rgba(115,115,115,0.08)', color: '#737373' }}>Not Tested</span>
+    );
     return pass ? (
-        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-green-100 text-green-700">Pass</span>
+        <span className="px-2 py-0.5 text-xs font-medium rounded-full" style={{ backgroundColor: 'rgba(34,197,94,0.08)', color: '#22c55e' }}>Pass</span>
     ) : (
-        <span className="px-2 py-0.5 text-xs font-medium rounded-full bg-red-100 text-red-700">Fail</span>
+        <span className="px-2 py-0.5 text-xs font-medium rounded-full" style={{ backgroundColor: 'rgba(239,68,68,0.08)', color: '#ef4444' }}>Fail</span>
     );
 };
 
@@ -128,6 +144,73 @@ const getLastMessage = (text: string, promptSent: string) => {
     };
 };
 
+// Extract overall assessment from LLM output
+const extractOverallAssessment = (llmOutput: string): { rating: string; comment: string } | null => {
+    if (!llmOutput) return null;
+
+    try {
+        // Clean up the output - remove markdown code blocks if present
+        let cleanOutput = llmOutput.trim();
+
+        // First, try to parse as full API response (Anthropic format with content array)
+        try {
+            const apiResponse = JSON.parse(cleanOutput);
+
+            // Check if it's an Anthropic API response with content array
+            if (apiResponse.content && Array.isArray(apiResponse.content)) {
+                // Extract the text from the first content block
+                cleanOutput = apiResponse.content[0]?.text || cleanOutput;
+            }
+        } catch {
+            // Not a JSON API response, continue with cleanOutput as-is
+        }
+
+        // Remove markdown json code blocks
+        if (cleanOutput.startsWith('```json')) {
+            cleanOutput = cleanOutput.replace(/^```json\s*/, '').replace(/\s*```$/, '');
+        } else if (cleanOutput.startsWith('```')) {
+            cleanOutput = cleanOutput.replace(/^```\s*/, '').replace(/\s*```$/, '');
+        }
+
+        // Try to find JSON if there's text around it
+        const jsonMatch = cleanOutput.match(/\{[\s\S]*\}/);
+        if (jsonMatch) {
+            cleanOutput = jsonMatch[0];
+        }
+
+        const parsed = JSON.parse(cleanOutput);
+
+        // Check for overall_assessment object at top level
+        if (parsed.overall_assessment?.comment) {
+            return {
+                rating: parsed.overall_assessment.rating || 'unknown',
+                comment: parsed.overall_assessment.comment
+            };
+        }
+
+        // Check nested in bot_response_evaluation
+        if (parsed.bot_response_evaluation?.overall_assessment?.comment) {
+            return {
+                rating: parsed.bot_response_evaluation.overall_assessment.rating || 'unknown',
+                comment: parsed.bot_response_evaluation.overall_assessment.comment
+            };
+        }
+
+        // Check nested in guardrail_system_performance
+        if (parsed.guardrail_system_performance?.overall_assessment?.comment) {
+            return {
+                rating: parsed.guardrail_system_performance.overall_assessment.rating || 'unknown',
+                comment: parsed.guardrail_system_performance.overall_assessment.comment
+            };
+        }
+
+    } catch (e) {
+        console.error('[RunHistory] Failed to parse LLM output:', e);
+    }
+
+    return null;
+};
+
 interface RunHistoryProps {
     botId?: string;
 }
@@ -136,6 +219,10 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const [runs, setRuns] = useState<EvaluationRun[]>([]);
     const [loading, setLoading] = useState(true);
     const [expandedRow, setExpandedRow] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [attackMessages, setAttackMessages] = useState<{ [sessionId: string]: AttackMessage[] }>({});
+    const [expandedModal, setExpandedModal] = useState<{ type: 'prompt' | 'output', content: string } | null>(null);
+    const pageSize = 10;
 
     const fetchRuns = async () => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -144,6 +231,23 @@ export default function RunHistory({ botId }: RunHistoryProps) {
             if (res.ok) {
                 const data = await res.json();
                 setRuns(data);
+
+                // Fetch attack messages for all unique session IDs
+                const sessionIds = [...new Set(data.map((run: EvaluationRun) => run.sessionId).filter(Boolean))] as string[];
+                const attackData: { [sessionId: string]: AttackMessage[] } = {};
+
+                await Promise.all(sessionIds.map(async (sessionId) => {
+                    try {
+                        const attackRes = await fetch(`${apiUrl}/attack-messages/${sessionId}`);
+                        if (attackRes.ok) {
+                            attackData[sessionId] = await attackRes.json();
+                        }
+                    } catch (err) {
+                        console.error(`[RunHistory] Failed to fetch attacks for session ${sessionId}:`, err);
+                    }
+                }));
+
+                setAttackMessages(attackData);
             }
         } catch (error) {
             console.error('Failed to fetch runs:', error);
@@ -172,6 +276,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
         try {
             await fetch(`${apiUrl}/runs`, { method: 'DELETE' });
             setRuns([]);
+            setCurrentPage(1);
         } catch (error) {
             console.error('Failed to clear runs:', error);
         }
@@ -341,6 +446,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                             <tr className="border-b border-[var(--border)]">
                                 <th className="text-left py-2 px-2 font-medium text-[var(--foreground-muted)]">Time</th>
                                 <th className="text-left py-2 px-2 font-medium text-[var(--foreground-muted)]">Conversation</th>
+                                <th className="text-left py-2 px-2 font-medium text-[var(--foreground-muted)]">Bot Session ID</th>
                                 <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Toxicity</th>
                                 <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Topics</th>
                                 <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Injection</th>
@@ -349,7 +455,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                             </tr>
                         </thead>
                         <tbody>
-                            {runs.map((run) => {
+                            {runs.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((run) => {
                                 const turns = getRunTurns(run);
                                 const turnCount = Math.max(turns.filter(t => t.role === 'user').length, 1);
 
@@ -380,6 +486,9 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                     </div>
                                                 </div>
                                             </td>
+                                            <td className="py-2 px-2 text-xs font-mono text-[var(--foreground-muted)]">
+                                                {run.sessionId || '-'}
+                                            </td>
                                             <td className="py-2 px-2 text-center"><PassFailBadge pass={run.toxicityPass} /></td>
                                             <td className="py-2 px-2 text-center"><PassFailBadge pass={run.topicsPass} /></td>
                                             <td className="py-2 px-2 text-center"><PassFailBadge pass={run.injectionPass} /></td>
@@ -394,50 +503,119 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                         </tr>
                                         {expandedRow === run.id && (
                                             <tr className="bg-[var(--surface-hover)]">
-                                                <td colSpan={7} className="p-4">
+                                                <td colSpan={8} className="p-4">
                                                     <div className="space-y-4">
+                                                        {/* Overall Assessment */}
+                                                        {(() => {
+                                                            const assessment = extractOverallAssessment(run.llmOutput);
+                                                            if (!assessment) return null;
+
+                                                            // Rating badge styling
+                                                            const getRatingStyle = (rating: string) => {
+                                                                const r = rating.toLowerCase();
+                                                                if (r === 'effective' || r === 'excellent') {
+                                                                    return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+                                                                }
+                                                                if (r === 'good' || r === 'adequate') {
+                                                                    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+                                                                }
+                                                                if (r === 'poor' || r === 'ineffective') {
+                                                                    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
+                                                                }
+                                                                if (r === 'warning' || r === 'moderate') {
+                                                                    return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
+                                                                }
+                                                                return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
+                                                            };
+
+                                                            return (
+                                                                <div className="bg-[var(--surface)] border-2 border-[var(--primary-600)] rounded-lg p-4">
+                                                                    <div className="flex items-start gap-3">
+                                                                        <div className="flex-shrink-0 mt-0.5">
+                                                                            <svg className="w-5 h-5 text-[var(--primary-600)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                                                            </svg>
+                                                                        </div>
+                                                                        <div className="flex-1 min-w-0">
+                                                                            <div className="flex items-center gap-2 mb-2">
+                                                                                <h4 className="font-semibold text-[var(--foreground)] text-sm">Overall Assessment</h4>
+                                                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full uppercase ${getRatingStyle(assessment.rating)}`}>
+                                                                                    {assessment.rating}
+                                                                                </span>
+                                                                            </div>
+                                                                            <p className="text-sm text-[var(--foreground-secondary)] leading-relaxed">{assessment.comment}</p>
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            );
+                                                        })()}
+
                                                         {/* Conversation View */}
                                                         <div>
-                                                            <h4 className="font-semibold text-[var(--foreground)] mb-2 text-sm flex items-center justify-between">
-                                                                <span>Conversation {turns.length > 0 && `(${Math.ceil(turns.length / 2)} turns)`}</span>
-                                                                {(run.totalTokens !== undefined && run.totalTokens !== null) && (
-                                                                    <span className="text-[10px] font-normal text-[var(--foreground-muted)] bg-gray-100 px-1.5 py-0.5 rounded">
-                                                                        {run.totalTokens.toLocaleString()} tokens
-                                                                    </span>
-                                                                )}
-                                                            </h4>
+                                                            <div className="mb-2">
+                                                                <h4 className="font-semibold text-[var(--foreground)] text-sm">
+                                                                    Conversation {turns.length > 0 && `(${Math.ceil(turns.length / 2)} turns)`}
+                                                                </h4>
+                                                            </div>
                                                             <div className="bg-[var(--background)] rounded-lg border border-[var(--border)] p-4 max-h-96 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-300">
                                                                 {turns.length > 0 ? (
-                                                                    turns.map((turn, idx) => (
-                                                                        <div
-                                                                            key={idx}
-                                                                            className={`flex ${turn.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                                                                        >
-                                                                            <div
-                                                                                className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${turn.role === 'user'
-                                                                                    ? (run.isAttack && idx === turns.length - 2 // Identify the attack turn
-                                                                                        ? 'bg-red-600 text-white border border-red-400 font-medium'
-                                                                                        : 'bg-blue-100 text-blue-900')
-                                                                                    : 'bg-gray-100 text-gray-900'
-                                                                                    }`}
-                                                                            >
-                                                                                <span className={`font-semibold text-[10px] uppercase tracking-wide opacity-60 ${run.isAttack && idx === turns.length - 2 ? 'text-red-100' : ''}`}>
-                                                                                    {turn.role === 'user' ? 'User' : 'Bot'}
-                                                                                </span>
-                                                                                {run.isAttack && idx === turns.length - 2 && (
-                                                                                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-red-100">
-                                                                                        Malicious Probe
+                                                                    (() => {
+                                                                        // Get attack messages for this session
+                                                                        const sessionAttacks = run.sessionId ? (attackMessages[run.sessionId] || []) : [];
+
+                                                                        return turns.map((turn, idx) => {
+                                                                            // Check if this turn is an attack by matching content
+                                                                            const attackInfo = turn.role === 'user'
+                                                                                ? sessionAttacks.find(a => a.messageContent === turn.content)
+                                                                                : null;
+                                                                            const isAttackTurn = !!attackInfo;
+
+                                                                            return (
+                                                                                <div
+                                                                                    key={idx}
+                                                                                    className={`flex ${turn.role === 'user' ? 'justify-start' : 'justify-end'}`}
+                                                                                >
+                                                                                    <div
+                                                                                        className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${turn.role === 'user'
+                                                                                            ? (isAttackTurn
+                                                                                                ? 'bg-red-600 text-white border border-red-400 font-medium'
+                                                                                                : 'bg-blue-100 text-blue-900')
+                                                                                            : 'bg-gray-100 text-gray-900'
+                                                                                            }`}
+                                                                                    >
+                                                                                        <span className={`font-semibold text-[10px] uppercase tracking-wide opacity-60 ${isAttackTurn ? 'text-red-100' : ''}`}>
+                                                                                            {turn.role === 'user' ? 'User' : 'Bot'}
+                                                                                        </span>
+                                                                                        {isAttackTurn && attackInfo && (
+                                                                                            <div className="flex items-center gap-2 mb-0.5">
+                                                                                                <div className="text-[9px] font-bold uppercase tracking-wider text-red-100">
+                                                                                                    🚨 Malicious Probe
+                                                                                                </div>
+                                                                                                <span className="px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-wide rounded-full bg-red-800/50 text-red-100 border border-red-400/30">
+                                                                                                    {attackInfo.category}
+                                                                                                </span>
+                                                                                            </div>
+                                                                                        )}
+                                                                                        <p className="mt-0.5">{turn.content}</p>
                                                                                     </div>
-                                                                                )}
-                                                                                <p className="mt-0.5">{turn.content}</p>
-                                                                            </div>
-                                                                        </div>
-                                                                    ))
+                                                                                </div>
+                                                                            );
+                                                                        });
+                                                                    })()
                                                                 ) : (
                                                                     <div className="space-y-2">
                                                                         <div className="flex justify-start">
-                                                                            <div className="max-w-[80%] px-3 py-2 rounded-lg text-xs bg-blue-100 text-blue-900">
-                                                                                <span className="font-semibold text-[10px] uppercase tracking-wide opacity-60">User</span>
+                                                                            <div className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${
+                                                                                run.isAttack
+                                                                                    ? 'bg-red-600 text-white border border-red-400 font-medium'
+                                                                                    : 'bg-blue-100 text-blue-900'
+                                                                            }`}>
+                                                                                <span className={`font-semibold text-[10px] uppercase tracking-wide opacity-60 ${run.isAttack ? 'text-red-100' : ''}`}>User</span>
+                                                                                {run.isAttack && (
+                                                                                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-red-100">
+                                                                                        🚨 Malicious Probe
+                                                                                    </div>
+                                                                                )}
                                                                                 <p className="mt-0.5">{run.userInput}</p>
                                                                             </div>
                                                                         </div>
@@ -452,15 +630,90 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                             </div>
                                                         </div>
 
+                                                        {/* Evaluation Metrics */}
+                                                        {run.totalTokens && (
+                                                            <div>
+                                                                <div className="mb-2">
+                                                                    <h4 className="font-semibold text-[var(--foreground)] text-sm">
+                                                                        Evaluation Metrics {run.model && `(${run.model})`}
+                                                                    </h4>
+                                                                </div>
+                                                                <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-3 mb-4">
+                                                                    <div className="grid grid-cols-4 gap-4 text-xs">
+                                                                    <div className="text-center">
+                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Input Tokens</div>
+                                                                        <div className="text-lg font-bold text-green-600 dark:text-green-400">
+                                                                            {run.inputTokens ? run.inputTokens.toLocaleString() : '—'}
+                                                                        </div>
+                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">
+                                                                            {run.inputTokens ? 'Prompt' : 'Not tracked'}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-center">
+                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Output Tokens</div>
+                                                                        <div className="text-lg font-bold text-[var(--primary-600)]">
+                                                                            {run.outputTokens ? run.outputTokens.toLocaleString() : '—'}
+                                                                        </div>
+                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">
+                                                                            {run.outputTokens ? 'Response' : 'Not tracked'}
+                                                                        </div>
+                                                                    </div>
+                                                                    <div className="text-center">
+                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Total Tokens</div>
+                                                                        <div className="text-lg font-bold text-[var(--foreground)]">{run.totalTokens.toLocaleString()}</div>
+                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">Combined</div>
+                                                                    </div>
+                                                                    <div className="text-center">
+                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Response Time</div>
+                                                                        <div className="text-lg font-bold text-[var(--foreground)]">
+                                                                            {run.latencyMs ? `${(run.latencyMs / 1000).toFixed(2)}s` : '—'}
+                                                                        </div>
+                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">
+                                                                            {run.latencyMs ? 'Latency' : 'Not tracked'}
+                                                                        </div>
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                            </div>
+                                                        )}
+
                                                         {/* LLM Details */}
                                                         <div className="grid grid-cols-2 gap-4 text-xs">
                                                             <div>
-                                                                <h4 className="font-semibold text-[var(--foreground)] mb-1">Prompt Sent to LLM</h4>
-                                                                <pre className="text-[var(--foreground-muted)] bg-gray-900 text-green-400 p-2 rounded border max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.promptSent}</pre>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <h4 className="font-semibold text-[var(--foreground)]">Prompt Sent to LLM</h4>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setExpandedModal({ type: 'prompt', content: run.promptSent });
+                                                                        }}
+                                                                        className="text-[var(--primary-600)] hover:text-[var(--primary-700)] p-1"
+                                                                        title="Expand"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                                                        </svg>
+                                                                    </button>
+                                                                </div>
+                                                                <pre className="bg-white dark:bg-gray-900 text-green-600 dark:text-green-400 p-2 rounded border border-[var(--border)] max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.promptSent}</pre>
                                                             </div>
                                                             <div>
-                                                                <h4 className="font-semibold text-[var(--foreground)] mb-1">LLM Output</h4>
-                                                                <pre className="text-[var(--foreground-muted)] bg-gray-900 text-blue-400 p-2 rounded border max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.llmOutput}</pre>
+                                                                <div className="flex items-center justify-between mb-1">
+                                                                    <h4 className="font-semibold text-[var(--foreground)]">LLM Output</h4>
+                                                                    <button
+                                                                        onClick={(e) => {
+                                                                            e.stopPropagation();
+                                                                            setExpandedModal({ type: 'output', content: run.llmOutput });
+                                                                        }}
+                                                                        className="text-[var(--primary-600)] hover:text-[var(--primary-700)] p-1"
+                                                                        title="Expand"
+                                                                    >
+                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                                                        </svg>
+                                                                    </button>
+                                                                </div>
+                                                                <pre className="bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 p-2 rounded border border-[var(--border)] max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.llmOutput}</pre>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -472,6 +725,71 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                             })}
                         </tbody>
                     </table>
+                    {/* Pagination */}
+                    {runs.length > pageSize && (
+                        <div className="flex items-center justify-between pt-3 mt-3 border-t border-[var(--border)]">
+                            <span className="text-xs text-[var(--foreground-muted)]">
+                                Showing {(currentPage - 1) * pageSize + 1}–{Math.min(currentPage * pageSize, runs.length)} of {runs.length}
+                            </span>
+                            <div className="flex items-center gap-1">
+                                <button
+                                    onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setExpandedRow(null); }}
+                                    disabled={currentPage === 1}
+                                    className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    ← Prev
+                                </button>
+                                {Array.from({ length: Math.ceil(runs.length / pageSize) }, (_, i) => i + 1).map(page => (
+                                    <button
+                                        key={page}
+                                        onClick={() => { setCurrentPage(page); setExpandedRow(null); }}
+                                        className={`w-7 h-7 text-xs font-medium rounded transition-colors ${
+                                            page === currentPage
+                                                ? 'bg-[var(--accent-primary,#4f46e5)] text-white'
+                                                : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
+                                        }`}
+                                    >
+                                        {page}
+                                    </button>
+                                ))}
+                                <button
+                                    onClick={() => { setCurrentPage(p => Math.min(Math.ceil(runs.length / pageSize), p + 1)); setExpandedRow(null); }}
+                                    disabled={currentPage === Math.ceil(runs.length / pageSize)}
+                                    className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                                >
+                                    Next →
+                                </button>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* Expanded Modal */}
+            {expandedModal && (
+                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50" onClick={() => setExpandedModal(null)}>
+                    <div className="bg-[var(--surface)] rounded-lg shadow-xl w-full max-w-6xl h-[85vh] flex flex-col" onClick={(e) => e.stopPropagation()}>
+                        <div className="p-4 border-b border-[var(--border)] flex justify-between items-center">
+                            <h3 className="text-lg font-medium text-[var(--foreground)]">
+                                {expandedModal.type === 'prompt' ? 'Prompt Sent to LLM' : 'LLM Output'}
+                            </h3>
+                            <button
+                                onClick={() => setExpandedModal(null)}
+                                className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl"
+                            >
+                                &times;
+                            </button>
+                        </div>
+                        <div className="flex-1 overflow-auto p-6">
+                            <pre className={`whitespace-pre-wrap text-sm ${
+                                expandedModal.type === 'prompt'
+                                    ? 'text-green-600 dark:text-green-400'
+                                    : 'text-blue-600 dark:text-blue-400'
+                            }`}>
+                                {expandedModal.content}
+                            </pre>
+                        </div>
+                    </div>
                 </div>
             )}
         </div>

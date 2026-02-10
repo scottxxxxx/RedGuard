@@ -342,7 +342,9 @@ ${systemPrompt}`;
                 fullApiResponse: result.fullResponse,
                 requestPayload: result.requestPayload,
                 hyperparams: params,
-                totalTokens: result.totalTokens
+                totalTokens: result.totalTokens,
+                latencyMs: Date.now() - startTime,
+                model: actualModel
             };
 
         } catch (error) {

@@ -45,10 +45,10 @@ export default function ThemeSwitcher() {
     if (!mounted) return null;
 
     return (
-        <div className="flex bg-gray-100 dark:bg-gray-800 rounded-lg p-1 border border-gray-200 dark:border-gray-700">
+        <div className="flex bg-[var(--surface-hover)] rounded-lg p-1 border border-[var(--border)]">
             <button
                 onClick={() => setTheme('light')}
-                className={`p-1.5 rounded-md transition-all ${theme === 'light' ? 'bg-white dark:bg-gray-700 shadow-sm text-yellow-500' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                className={`p-1.5 rounded-md transition-all ${theme === 'light' ? 'bg-[var(--surface)] shadow-sm text-yellow-500 dark:text-yellow-400' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                 title="Light Mode"
             >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -57,7 +57,7 @@ export default function ThemeSwitcher() {
             </button>
             <button
                 onClick={() => setTheme('system')}
-                className={`p-1.5 rounded-md transition-all ${theme === 'system' ? 'bg-white dark:bg-gray-700 shadow-sm text-blue-500' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                className={`p-1.5 rounded-md transition-all ${theme === 'system' ? 'bg-[var(--surface)] shadow-sm text-blue-500 dark:text-blue-400' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                 title="System (Auto)"
             >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -66,7 +66,7 @@ export default function ThemeSwitcher() {
             </button>
             <button
                 onClick={() => setTheme('dark')}
-                className={`p-1.5 rounded-md transition-all ${theme === 'dark' ? 'bg-white dark:bg-gray-700 shadow-sm text-indigo-400' : 'text-gray-500 hover:text-gray-900 dark:hover:text-gray-200'}`}
+                className={`p-1.5 rounded-md transition-all ${theme === 'dark' ? 'bg-[var(--surface)] shadow-sm text-indigo-500 dark:text-indigo-400' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                 title="Dark Mode"
             >
                 <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">

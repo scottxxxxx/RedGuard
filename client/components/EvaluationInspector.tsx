@@ -132,7 +132,7 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                     setLocalPayload(newPayload);
                     onPayloadChange?.(newPayload);
                 } catch (e) {
-                    console.error("Failed to sync payload on param change", e);
+                    // Silently ignore - expected when no chat interaction exists yet
                 } finally {
                     setIsSyncing(false);
                 }
@@ -220,13 +220,33 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
     const resultData = result ? (result.result || result) : null;
     const verdictInfo = getVerdictInfo();
 
+    // Helper to remove token usage from displayed response
+    const filterTokenInfo = (response: any) => {
+        if (!response) return response;
+        if (typeof response === 'string') {
+            try {
+                const parsed = JSON.parse(response);
+                const filtered = { ...parsed };
+                delete filtered.usage;
+                delete filtered.usageMetadata;
+                delete filtered.totalTokens;
+                delete filtered.inputTokens;
+                delete filtered.outputTokens;
+                return JSON.stringify(filtered, null, 2);
+            } catch {
+                return response;
+            }
+        }
+        return response;
+    };
+
     return (
-        <div className="bg-white dark:bg-gray-800 shadow rounded-lg flex flex-col h-[600px]">
+        <div className="bg-[var(--surface)] shadow rounded-lg flex flex-col h-[600px]">
             {verdictInfo && (
-                <div className={`p-4 border-b ${verdictInfo.type === 'pass' ? 'bg-green-50 border-green-200' :
-                    verdictInfo.type === 'warning' ? 'bg-orange-50 border-orange-200' :
-                        verdictInfo.type === 'error' ? 'bg-yellow-50 border-yellow-200' :
-                            'bg-red-50 border-red-200'
+                <div className={`p-4 border-b ${verdictInfo.type === 'pass' ? 'bg-success-bg border-success-border' :
+                    verdictInfo.type === 'warning' ? 'bg-warning-bg border-warning-border' :
+                        verdictInfo.type === 'error' ? 'bg-warning-bg border-warning-border' :
+                            'bg-error-bg border-error-border'
                     }`}>
                     <div className="flex items-center gap-2">
                         <span className="text-xl">
@@ -234,19 +254,19 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                                 verdictInfo.type === 'warning' ? '⚠️' :
                                     verdictInfo.type === 'error' ? '⚠️' : '❌'}
                         </span>
-                        <span className={`font-bold ${verdictInfo.type === 'pass' ? 'text-green-800' :
-                            verdictInfo.type === 'warning' ? 'text-orange-800' :
-                                verdictInfo.type === 'error' ? 'text-yellow-800' :
-                                    'text-red-800'
+                        <span className={`font-bold ${verdictInfo.type === 'pass' ? 'text-success-text' :
+                            verdictInfo.type === 'warning' ? 'text-warning-text' :
+                                verdictInfo.type === 'error' ? 'text-warning-text' :
+                                    'text-error-text'
                             }`}>
                             {verdictInfo.message}
                         </span>
                     </div>
                     {verdictInfo.details && (
-                        <p className={`mt-2 text-sm ${verdictInfo.type === 'pass' ? 'text-green-700' :
-                            verdictInfo.type === 'warning' ? 'text-orange-700' :
-                                verdictInfo.type === 'error' ? 'text-yellow-700' :
-                                    'text-red-700'
+                        <p className={`mt-2 text-sm ${verdictInfo.type === 'pass' ? 'text-success-text' :
+                            verdictInfo.type === 'warning' ? 'text-warning-text' :
+                                verdictInfo.type === 'error' ? 'text-warning-text' :
+                                    'text-error-text'
                             }`}>
                             {verdictInfo.details}
                         </p>
@@ -255,10 +275,10 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
             )}
 
             {/* Hyperparameter Controls */}
-            <div className="border-b border-gray-200 dark:border-gray-700">
+            <div className="border-b border-[var(--border)]">
                 <button
                     onClick={() => setShowHyperparams(!showHyperparams)}
-                    className="w-full px-4 py-2 text-left text-sm font-medium text-gray-600 dark:text-gray-300 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center justify-between"
+                    className="w-full px-4 py-2 text-left text-sm font-medium text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] flex items-center justify-between"
                 >
                     <span className="flex items-center gap-2">
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -272,9 +292,9 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                 </button>
 
                 {showHyperparams && (
-                    <div className="px-4 py-3 bg-gray-50 dark:bg-gray-900 grid grid-cols-3 gap-4">
+                    <div className="px-4 py-3 bg-[var(--surface-hover)] grid grid-cols-3 gap-4">
                         <div>
-                            <label className={`block text-xs font-medium mb-1 ${(provider === 'anthropic' && localParams.top_p !== 1.0) ? 'text-gray-400 opacity-50' : 'text-gray-500 dark:text-gray-400'}`}>
+                            <label className={`block text-xs font-medium mb-1 ${(provider === 'anthropic' && localParams.top_p !== 1.0) ? 'text-[var(--foreground-muted)] opacity-50' : 'text-[var(--foreground-muted)]'}`}>
                                 Temperature {(provider === 'anthropic' && localParams.top_p !== 1.0) && "(Ignored)"}
                             </label>
                             <input
@@ -285,12 +305,12 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                                 disabled={provider === 'anthropic' && localParams.top_p !== 1.0}
                                 value={(provider === 'anthropic' && localParams.top_p !== 1.0) ? 0 : localParams.temperature}
                                 onChange={(e) => handleParamChange('temperature', parseFloat(e.target.value) || 0)}
-                                className={`w-full px-2 py-1.5 text-sm border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-opacity ${(provider === 'anthropic' && localParams.top_p !== 1.0) ? 'opacity-30 cursor-not-allowed border-gray-200' : 'border-gray-300 dark:border-gray-600'}`}
+                                className={`w-full px-2 py-1.5 text-sm border rounded bg-[var(--surface)] text-[var(--foreground)] transition-opacity ${(provider === 'anthropic' && localParams.top_p !== 1.0) ? 'opacity-30 cursor-not-allowed border-[var(--border)]' : 'border-[var(--border)]'}`}
                             />
-                            <span className="text-[10px] text-gray-400">0 = deterministic</span>
+                            <span className="text-[10px] text-[var(--foreground-muted)]">0 = deterministic</span>
                         </div>
                         <div>
-                            <label className="block text-xs font-medium text-gray-500 dark:text-gray-400 mb-1">
+                            <label className="block text-xs font-medium text-[var(--foreground-muted)] mb-1">
                                 Max Tokens
                             </label>
                             <input
@@ -300,12 +320,12 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                                 step="100"
                                 value={localParams.max_tokens}
                                 onChange={(e) => handleParamChange('max_tokens', parseInt(e.target.value) || 4096)}
-                                className="w-full px-2 py-1.5 text-sm border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100"
+                                className="w-full px-2 py-1.5 text-sm border border-[var(--border)] rounded bg-[var(--surface)] text-[var(--foreground)]"
                             />
-                            <span className="text-[10px] text-gray-400">Response limit</span>
+                            <span className="text-[10px] text-[var(--foreground-muted)]">Response limit</span>
                         </div>
                         <div>
-                            <label className={`block text-xs font-medium mb-1 ${(provider === 'anthropic' && localParams.temperature !== 0) ? 'text-gray-400 opacity-50' : 'text-gray-500 dark:text-gray-400'}`}>
+                            <label className={`block text-xs font-medium mb-1 ${(provider === 'anthropic' && localParams.temperature !== 0) ? 'text-[var(--foreground-muted)] opacity-50' : 'text-[var(--foreground-muted)]'}`}>
                                 Top P {(provider === 'anthropic' && localParams.temperature !== 0) ? "(Ignored)" : (localParams.temperature !== 0 && localParams.top_p === 1.0 && "(Default)")}
                             </label>
                             <input
@@ -316,36 +336,36 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                                 disabled={provider === 'anthropic' && localParams.temperature !== 0}
                                 value={(provider === 'anthropic' && localParams.temperature !== 0) ? 1 : localParams.top_p}
                                 onChange={(e) => handleParamChange('top_p', parseFloat(e.target.value) || 1)}
-                                className={`w-full px-2 py-1.5 text-sm border rounded bg-white dark:bg-gray-800 text-gray-900 dark:text-gray-100 transition-opacity ${(provider === 'anthropic' && localParams.temperature !== 0) ? 'opacity-30 cursor-not-allowed border-gray-200' : 'border-gray-300 dark:border-gray-600'}`}
+                                className={`w-full px-2 py-1.5 text-sm border rounded bg-[var(--surface)] text-[var(--foreground)] transition-opacity ${(provider === 'anthropic' && localParams.temperature !== 0) ? 'opacity-30 cursor-not-allowed border-[var(--border)]' : 'border-[var(--border)]'}`}
                             />
-                            <span className="text-[10px] text-gray-400">Nucleus sampling</span>
+                            <span className="text-[10px] text-[var(--foreground-muted)]">Nucleus sampling</span>
                         </div>
                     </div>
                 )}
             </div>
 
             {/* Tab Headers */}
-            <div className="flex border-b border-gray-200 dark:border-gray-700 bg-gray-50 dark:bg-gray-900">
+            <div className="flex border-b border-[var(--border)] bg-[var(--surface-hover)]">
                 <button
-                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'prompt' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'prompt' ? 'text-[var(--primary-600)] border-b-2 border-[var(--primary-600)] bg-[var(--surface)]' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                     onClick={() => handleTabChange('prompt')}
                 >
                     Evaluation Prompt
                 </button>
                 <button
-                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'payload' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'payload' ? 'text-[var(--primary-600)] border-b-2 border-[var(--primary-600)] bg-[var(--surface)]' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                     onClick={() => handleTabChange('payload')}
                 >
                     Raw Request
                 </button>
                 <button
-                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'output' ? 'text-[var(--primary-600)] border-b-2 border-[var(--primary-600)] bg-[var(--surface)]' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                     onClick={() => handleTabChange('output')}
                 >
                     Evaluation Results
                 </button>
                 <button
-                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'full' ? 'text-indigo-600 border-b-2 border-indigo-600 bg-white dark:bg-gray-800' : 'text-gray-500 hover:text-gray-700'}`}
+                    className={`flex-1 py-3 text-sm font-medium ${activeTab === 'full' ? 'text-[var(--primary-600)] border-b-2 border-[var(--primary-600)] bg-[var(--surface)]' : 'text-[var(--foreground-muted)] hover:text-[var(--foreground)]'}`}
                     onClick={() => handleTabChange('full')}
                 >
                     Raw Response
@@ -353,12 +373,12 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
             </div>
 
             {/* Content */}
-            <div className="flex-1 h-0 overflow-auto p-4 bg-gray-900 font-mono text-xs">
+            <div className="flex-1 h-0 overflow-auto p-4 bg-[var(--background)] font-mono text-xs border-t border-[var(--border)]">
                 {isSyncing ? (
-                    <div className="flex items-center justify-center h-full text-gray-400">Syncing...</div>
+                    <div className="flex items-center justify-center h-full text-[var(--foreground-muted)]">Syncing...</div>
                 ) : activeTab === 'prompt' ? (
                     <textarea
-                        className="w-full h-full bg-transparent text-green-400 resize-none outline-none border-none p-0"
+                        className="w-full h-full bg-transparent text-[var(--foreground)] resize-none outline-none border-none p-0 placeholder:text-[var(--foreground-muted)]"
                         value={localPrompt || ""}
                         onChange={(e) => {
                             setLocalPrompt(e.target.value);
@@ -368,7 +388,7 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                     />
                 ) : activeTab === 'payload' ? (
                     <textarea
-                        className="w-full h-full bg-transparent text-yellow-400 resize-none outline-none border-none p-0"
+                        className="w-full h-full bg-transparent text-[var(--foreground)] resize-none outline-none border-none p-0 placeholder:text-[var(--foreground-muted)]"
                         value={localPayload || ""}
                         onChange={(e) => {
                             setLocalPayload(e.target.value);
@@ -377,12 +397,12 @@ export default function EvaluationInspector({ provider, prompt, rawResponse, res
                         placeholder="Raw API payload not available."
                     />
                 ) : activeTab === 'output' ? (
-                    <pre className="whitespace-pre-wrap text-blue-400">
+                    <pre className="whitespace-pre-wrap text-[var(--foreground)]">
                         {rawResponse || "No evaluation output yet."}
                     </pre>
                 ) : (
-                    <pre className="whitespace-pre-wrap text-purple-400">
-                        {result?.debug?.fullResponse || result?.fullApiResponse || "Formatted response not available.\n\nThis shows the complete formatted response from the LLM provider including metadata like token usage."}
+                    <pre className="whitespace-pre-wrap text-[var(--foreground)]">
+                        {filterTokenInfo(result?.debug?.fullResponse || result?.fullApiResponse) || "Formatted response not available.\n\nThis shows the complete formatted response from the LLM provider."}
                     </pre>
                 )}
             </div>
