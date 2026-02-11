@@ -14,9 +14,11 @@ interface Props {
     onSessionReset?: () => void;
     onBotResponse?: () => void;
     onKoreSessionUpdate?: (sessionId: string) => void;  // Callback to pass Kore's session ID to parent
+    isAuthenticated?: boolean;
+    onAuthRequired?: () => void;
 }
 
-export default function ChatConsole({ config, botConfig, onInteractionUpdate, messages, setMessages, userId, koreSessionId, onSessionReset, onBotResponse, onKoreSessionUpdate }: Props) {
+export default function ChatConsole({ config, botConfig, onInteractionUpdate, messages, setMessages, userId, koreSessionId, onSessionReset, onBotResponse, onKoreSessionUpdate, isAuthenticated, onAuthRequired }: Props) {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [showAttackMenu, setShowAttackMenu] = useState(false);
@@ -79,6 +81,12 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
     };
 
     const sendMessage = async () => {
+        // Check authentication first
+        if (!isAuthenticated && onAuthRequired) {
+            onAuthRequired();
+            return;
+        }
+
         if (!input.trim()) return;
 
         if (!config || !config.llmConfig || !config.llmConfig.apiKey) {
