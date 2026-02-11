@@ -174,15 +174,21 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                 }
             }
 
-            // Workflow 2: If Bot ID changes and webhook ends with /webhook/, append Bot ID
-            if (key === 'botId' && value) {
-                if (prev.webhookUrl.endsWith('/webhook/')) {
-                    // Base URL without Bot ID - append it
-                    updated.webhookUrl = prev.webhookUrl + value;
+            // Workflow 2: If Bot ID changes, sync with webhook URL
+            if (key === 'botId') {
+                if (value) {
+                    // Bot ID provided - add or update it in webhook URL
+                    if (prev.webhookUrl.endsWith('/webhook/')) {
+                        // Base URL without Bot ID - append it
+                        updated.webhookUrl = prev.webhookUrl + value;
+                    } else {
+                        // URL already has a Bot ID - replace it
+                        const baseUrl = prev.webhookUrl.replace(/\/webhook\/[a-z0-9-]*$/i, '/webhook/');
+                        updated.webhookUrl = baseUrl + value;
+                    }
                 } else {
-                    // URL already has a Bot ID - replace it
-                    const baseUrl = prev.webhookUrl.replace(/\/webhook\/[a-z0-9-]*$/i, '/webhook/');
-                    updated.webhookUrl = baseUrl + value;
+                    // Bot ID cleared - remove it from webhook URL
+                    updated.webhookUrl = prev.webhookUrl.replace(/\/webhook\/[a-z0-9-]*$/i, '/webhook/');
                 }
             }
 
