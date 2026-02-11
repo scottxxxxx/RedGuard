@@ -13,7 +13,7 @@ import LogViewer from "@/components/LogViewer";
 import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import AuthButton from "@/components/AuthButton";
-import SignInGate from "@/components/SignInGate";
+import SignInModal from "@/components/SignInModal";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
 import { useUser } from "@/contexts/UserContext";
@@ -58,6 +58,18 @@ function HomeContent() {
     // Sidebar state
     const [isSidebarExpanded, setIsSidebarExpanded] = useState(false);
     const [isSidebarHovered, setIsSidebarHovered] = useState(false);
+
+    // Auth modal state
+    const [showSignInModal, setShowSignInModal] = useState(false);
+
+    // Check auth before allowing interaction
+    const requireAuth = useCallback((action: () => void) => {
+        if (!isAuthenticated) {
+            setShowSignInModal(true);
+            return;
+        }
+        action();
+    }, [isAuthenticated]);
 
     // Auto-refresh Kore GenAI Logs after bot response (5 second delay)
     // Only works if Inspector is mounted
@@ -366,14 +378,14 @@ function HomeContent() {
                     </div>
                 </nav>
 
-                {/* Authentication Gate or Main Content */}
-                {!isAuthenticated ? (
-                    <SignInGate />
-                ) : (
-                    <div className="flex flex-1 overflow-hidden">
+                {/* Sign In Modal */}
+                <SignInModal isOpen={showSignInModal} onClose={() => setShowSignInModal(false)} />
 
-                        {/* Sidebar */}
-                        <aside
+                {/* Main Content - Always Visible */}
+                <div className="flex flex-1 overflow-hidden">
+
+                    {/* Sidebar */}
+                    <aside
                         className={`bg-surface border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative ${
                             isSidebarExpanded || isSidebarHovered ? 'w-64' : 'w-16'
                         }`}
@@ -667,8 +679,7 @@ function HomeContent() {
                             </div>
                         </div>
                     </main>
-                    </div>
-                )}
+                </div>
         </div>
     );
 }
