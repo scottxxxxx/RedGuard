@@ -24,6 +24,10 @@ app.get('/api/version', (req, res) => {
   });
 });
 
+// Troubleshooting endpoints
+const troubleshootRoutes = require('./routes/troubleshoot');
+app.use('/api/troubleshoot', troubleshootRoutes);
+
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
