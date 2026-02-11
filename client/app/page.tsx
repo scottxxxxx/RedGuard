@@ -511,7 +511,7 @@ function HomeContent() {
                                                     koreSessionId={koreSessionId}
                                                     onSessionReset={handleSessionReset}
                                                     onBotResponse={handleBotResponse}
-                                                    onKoreSessionUpdate={setKoreSessionUpdate}
+                                                    onKoreSessionUpdate={setKoreSessionId}
                                                     isAuthenticated={isAuthenticated}
                                                     onAuthRequired={() => setShowSignInModal(true)}
                                                 />
