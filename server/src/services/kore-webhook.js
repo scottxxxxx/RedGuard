@@ -81,7 +81,10 @@ class KoreService {
                 'Content-Type': 'application/json'
             };
 
-            const response = await axios.post(url, payload, { headers });
+            const response = await axios.post(url, payload, {
+                headers,
+                timeout: 12000 // 12 second timeout (less than frontend's 15s to allow for network overhead)
+            });
 
             return response.data;
         } catch (error) {

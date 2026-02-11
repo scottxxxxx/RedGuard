@@ -5,12 +5,13 @@ const apiLogger = require('../services/api-logger');
 // Get logs with filtering
 router.get('/', async (req, res) => {
     try {
-        const { logType, isError, provider, startDate, endDate, limit, offset } = req.query;
+        const { logType, isError, provider, userId, startDate, endDate, limit, offset } = req.query;
 
         const result = await apiLogger.getLogs({
             logType,
             isError: isError === 'true' ? true : isError === 'false' ? false : undefined,
             provider,
+            userId,
             startDate,
             endDate,
             limit: parseInt(limit) || 100,

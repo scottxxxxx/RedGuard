@@ -3,6 +3,7 @@ import React, { useState, useEffect } from 'react';
 
 interface ApiLog {
     id: string;
+    userId: string;
     timestamp: string;
     logType: string;
     method: string;
@@ -34,14 +35,27 @@ export default function LogViewer() {
     const [filter, setFilter] = useState({
         logType: '',
         isError: '',
-        provider: ''
+        provider: '',
+        userId: ''
+    });
+    const [sortConfig, setSortConfig] = useState<{ key: keyof ApiLog; direction: 'asc' | 'desc' }>({
+        key: 'timestamp',
+        direction: 'desc'
     });
     const [expandedLog, setExpandedLog] = useState<string | null>(null);
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalLogs, setTotalLogs] = useState(0);
+    const pageSize = 20;
+
+    // Reset to page 1 when filters change
+    useEffect(() => {
+        setCurrentPage(1);
+    }, [filter]);
 
     useEffect(() => {
         fetchLogs();
         fetchStats();
-    }, [filter]);
+    }, [filter, currentPage]);
 
     const fetchLogs = async () => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -50,17 +64,52 @@ export default function LogViewer() {
             if (filter.logType) params.append('logType', filter.logType);
             if (filter.isError) params.append('isError', filter.isError);
             if (filter.provider) params.append('provider', filter.provider);
-            params.append('limit', '50');
+            if (filter.userId) params.append('userId', filter.userId);
+            params.append('limit', pageSize.toString());
+            params.append('offset', ((currentPage - 1) * pageSize).toString());
 
             const res = await fetch(`${apiUrl}/logs?${params}`);
             const data = await res.json();
             setLogs(data.logs || []);
+            setTotalLogs(data.total || 0);
         } catch (error) {
             console.error('Failed to fetch logs:', error);
         } finally {
             setLoading(false);
         }
     };
+
+    const handleSort = (key: keyof ApiLog) => {
+        setSortConfig(prev => ({
+            key,
+            direction: prev.key === key && prev.direction === 'asc' ? 'desc' : 'asc'
+        }));
+    };
+
+    const sortedLogs = React.useMemo(() => {
+        const sorted = [...logs].sort((a, b) => {
+            const aValue = a[sortConfig.key];
+            const bValue = b[sortConfig.key];
+
+            if (aValue === null || aValue === undefined) return 1;
+            if (bValue === null || bValue === undefined) return -1;
+
+            if (typeof aValue === 'string' && typeof bValue === 'string') {
+                return sortConfig.direction === 'asc'
+                    ? aValue.localeCompare(bValue)
+                    : bValue.localeCompare(aValue);
+            }
+
+            if (typeof aValue === 'number' && typeof bValue === 'number') {
+                return sortConfig.direction === 'asc'
+                    ? aValue - bValue
+                    : bValue - aValue;
+            }
+
+            return 0;
+        });
+        return sorted;
+    }, [logs, sortConfig]);
 
     const fetchStats = async () => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -89,6 +138,9 @@ export default function LogViewer() {
     const getLogTypeColor = (type: string) => {
         switch (type) {
             case 'kore_chat': return 'bg-badge-blue-bg text-badge-blue-text';
+            case 'kore_connect': return 'bg-badge-blue-bg text-badge-blue-text';
+            case 'kore_validate': return 'bg-badge-orange-bg text-badge-orange-text';
+            case 'kore_genAI_logs': return 'bg-badge-purple-bg text-badge-purple-text';
             case 'llm_evaluate': return 'bg-badge-purple-bg text-badge-purple-text';
             default: return 'bg-badge-gray-bg text-badge-gray-text';
         }
@@ -149,6 +201,9 @@ export default function LogViewer() {
                 >
                     <option value="">All Types</option>
                     <option value="kore_chat">Kore.AI Chat</option>
+                    <option value="kore_connect">Kore.AI Connect</option>
+                    <option value="kore_validate">Kore.AI Validate</option>
+                    <option value="kore_genAI_logs">Gen AI Logs Fetch</option>
                     <option value="llm_evaluate">LLM Evaluation</option>
                 </select>
                 <select
@@ -171,6 +226,13 @@ export default function LogViewer() {
                     <option value="openai">OpenAI</option>
                     <option value="gemini">Google Gemini</option>
                 </select>
+                <input
+                    type="text"
+                    placeholder="Filter by User ID..."
+                    value={filter.userId}
+                    onChange={(e) => setFilter({ ...filter, userId: e.target.value })}
+                    className="px-3 py-2 border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-lg"
+                />
                 <button
                     onClick={fetchLogs}
                     className="px-4 py-2 bg-[var(--primary-600)] text-white rounded-lg hover:bg-[var(--primary-700)]"
@@ -184,26 +246,48 @@ export default function LogViewer() {
                 <table className="min-w-full divide-y divide-[var(--border)]">
                     <thead className="bg-[var(--surface-hover)]">
                         <tr>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Time</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Type</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Provider</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Status</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Tokens</th>
-                            <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Latency</th>
+                            {/* Sortable header helper */}
+                            {(['timestamp', 'userId', 'logType', 'provider', 'statusCode', 'totalTokens', 'latencyMs'] as const).map((key) => {
+                                const labels: Record<typeof key, string> = {
+                                    timestamp: 'Time',
+                                    userId: 'User',
+                                    logType: 'Type',
+                                    provider: 'Provider',
+                                    statusCode: 'Status',
+                                    totalTokens: 'Tokens',
+                                    latencyMs: 'Latency'
+                                };
+                                return (
+                                    <th
+                                        key={key}
+                                        onClick={() => handleSort(key)}
+                                        className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase cursor-pointer hover:text-[var(--foreground)] transition-colors select-none"
+                                    >
+                                        <div className="flex items-center gap-1">
+                                            {labels[key]}
+                                            <span className="text-[10px]">
+                                                {sortConfig.key === key ? (
+                                                    sortConfig.direction === 'asc' ? '↑' : '↓'
+                                                ) : '↕'}
+                                            </span>
+                                        </div>
+                                    </th>
+                                );
+                            })}
                             <th className="px-4 py-3 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Details</th>
                         </tr>
                     </thead>
                     <tbody className="divide-y divide-[var(--border)]">
                         {loading ? (
                             <tr>
-                                <td colSpan={7} className="px-4 py-8 text-center text-[var(--foreground-muted)]">Loading...</td>
+                                <td colSpan={8} className="px-4 py-8 text-center text-[var(--foreground-muted)]">Loading...</td>
                             </tr>
-                        ) : logs.length === 0 ? (
+                        ) : sortedLogs.length === 0 ? (
                             <tr>
-                                <td colSpan={7} className="px-4 py-8 text-center text-[var(--foreground-muted)]">No logs found</td>
+                                <td colSpan={8} className="px-4 py-8 text-center text-[var(--foreground-muted)]">No logs found</td>
                             </tr>
                         ) : (
-                            logs.map((log) => (
+                            sortedLogs.map((log) => (
                                 <React.Fragment key={log.id}>
                                     <tr
                                         className={`cursor-pointer hover:bg-[var(--surface-hover)] ${log.isError ? 'bg-error-bg' : ''}`}
@@ -211,6 +295,9 @@ export default function LogViewer() {
                                     >
                                         <td className="px-4 py-3 text-sm text-[var(--foreground-secondary)] whitespace-nowrap">
                                             {formatTimestamp(log.timestamp)}
+                                        </td>
+                                        <td className="px-4 py-3 text-sm text-[var(--foreground-secondary)] max-w-[200px] truncate" title={log.userId || 'N/A'}>
+                                            {log.userId || <span className="text-[var(--foreground-muted)] italic">N/A</span>}
                                         </td>
                                         <td className="px-4 py-3">
                                             <span className={`px-2 py-1 text-xs rounded-full ${getLogTypeColor(log.logType)}`}>
@@ -268,6 +355,44 @@ export default function LogViewer() {
                     </tbody>
                 </table>
             </div>
+
+            {/* Pagination Controls */}
+            {totalLogs > pageSize && (
+                <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
+                    <div className="text-sm text-[var(--foreground-muted)]">
+                        Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalLogs)} of {totalLogs} logs
+                    </div>
+                    <div className="flex items-center gap-1">
+                        <button
+                            onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setExpandedLog(null); }}
+                            disabled={currentPage === 1}
+                            className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            ← Previous
+                        </button>
+                        {Array.from({ length: Math.ceil(totalLogs / pageSize) }, (_, i) => i + 1).map(page => (
+                            <button
+                                key={page}
+                                onClick={() => { setCurrentPage(page); setExpandedLog(null); }}
+                                className={`w-7 h-7 text-xs font-medium rounded transition-colors ${
+                                    page === currentPage
+                                        ? 'bg-[var(--primary-600)] text-white'
+                                        : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
+                                }`}
+                            >
+                                {page}
+                            </button>
+                        ))}
+                        <button
+                            onClick={() => { setCurrentPage(p => Math.min(Math.ceil(totalLogs / pageSize), p + 1)); setExpandedLog(null); }}
+                            disabled={currentPage === Math.ceil(totalLogs / pageSize)}
+                            className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                        >
+                            Next →
+                        </button>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

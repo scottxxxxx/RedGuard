@@ -28,6 +28,7 @@ router.post('/send', async (req, res) => {
 
         // Log successful request
         await apiLogger.log({
+            userId: explicitUserId,
             logType: 'kore_chat',
             method: 'POST',
             endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
@@ -47,6 +48,7 @@ router.post('/send', async (req, res) => {
 
         // Log error
         await apiLogger.log({
+            userId: explicitUserId,
             logType: 'kore_chat',
             method: 'POST',
             endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
@@ -102,10 +104,21 @@ router.post('/connect', async (req, res) => {
         console.log(`[Connection] Response keys:`, Object.keys(kResponse));
 
         await apiLogger.log({
+            userId: explicitUserId,
             logType: 'kore_connect',
             method: 'POST',
             endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
-            requestBody: { userId: explicitUserId, action: "initial_connect" },
+            requestBody: {
+                userId: explicitUserId,
+                action: "initial_connect",
+                botConfig: {
+                    webhookUrl: botConfig?.webhookUrl,
+                    botId: botConfig?.botId,
+                    clientId: botConfig?.clientId,
+                    clientSecret: '[REDACTED]',
+                    host: botConfig?.host
+                }
+            },
             statusCode: 200,
             responseBody: kResponse,
             latencyMs: Date.now() - startTime,
@@ -126,6 +139,32 @@ router.post('/connect', async (req, res) => {
         res.json(enrichedResponse);
     } catch (error) {
         console.error("Connect Error:", error.message);
+
+        // Log connection error
+        await apiLogger.log({
+            userId: explicitUserId,
+            logType: 'kore_connect',
+            method: 'POST',
+            endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
+            requestBody: {
+                userId: explicitUserId,
+                action: "initial_connect",
+                botConfig: botConfig ? {
+                    webhookUrl: botConfig.webhookUrl,
+                    botId: botConfig.botId,
+                    clientId: botConfig.clientId,
+                    clientSecret: '[REDACTED]',
+                    host: botConfig.host
+                } : null
+            },
+            statusCode: error.response?.status || 500,
+            responseBody: error.response?.data || { error: error.message },
+            latencyMs: Date.now() - startTime,
+            isError: true,
+            errorMessage: error.message,
+            provider: 'kore'
+        });
+
         res.status(500).json({
             error: "Failed to connect to bot",
             details: error.response ? error.response.data : error.message

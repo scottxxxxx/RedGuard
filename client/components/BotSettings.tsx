@@ -124,11 +124,22 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
 
         try {
             const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/validate`;
+
+            // Add 20-second timeout to validation request
+            const controller = new AbortController();
+            const timeoutId = setTimeout(() => controller.abort(), 20000);
+
             const res = await fetch(apiUrl, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ botConfig: currentConfig })
+                body: JSON.stringify({
+                    botConfig: currentConfig,
+                    userId: userId || 'unknown'
+                }),
+                signal: controller.signal
             });
+
+            clearTimeout(timeoutId);
 
             const data = await res.json();
             if (!res.ok) {
@@ -322,25 +333,17 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                 <div>
                     <label className="block text-xs font-medium text-[var(--foreground-muted)] mb-1.5">
                         Bot ID
-                        {isBotIdInferred && (
-                            <span className="ml-2 text-[10px] text-[var(--foreground-muted)] font-normal italic">
-                                (inferred from webhook URL)
-                            </span>
-                        )}
                     </label>
                     <input
                         type="text"
                         value={config.botId}
                         onChange={(e) => handleChange('botId', e.target.value)}
-                        disabled={isBotIdInferred}
-                        placeholder={webhookIsIncomplete ? "Enter Bot ID (e.g., st-abc123...)" : ""}
-                        className={`input w-full text-sm font-mono ${isBotIdInferred ? 'bg-gray-100 dark:bg-gray-800 text-gray-500 dark:text-gray-500 cursor-not-allowed' : 'text-[var(--foreground)]'}`}
+                        placeholder="Enter Bot ID (e.g., st-abc123...)"
+                        className="input w-full text-sm font-mono text-[var(--foreground)]"
                     />
-                    {webhookIsIncomplete && !config.botId && (
-                        <p className="text-[10px] text-[var(--foreground-muted)] mt-1">
-                            Enter your Bot ID or paste the complete webhook URL above
-                        </p>
-                    )}
+                    <p className="text-[10px] text-[var(--foreground-muted)] mt-1">
+                        Syncs with webhook URL automatically
+                    </p>
                 </div>
             </div>
 
