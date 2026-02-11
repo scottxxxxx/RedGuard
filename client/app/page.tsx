@@ -463,32 +463,6 @@ function HomeContent() {
                         <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
                             <RedGuardIntro />
 
-                            {/* Auth Overlay - Blocks everything except hero section */}
-                            {!isAuthenticated && !isLoading && (
-                                <div
-                                    className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer"
-                                    onClick={() => setShowSignInModal(true)}
-                                    style={{ top: '280px' }} // Positioned below hero section
-                                >
-                                    <div className="flex items-start justify-center pt-12">
-                                        <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center animate-fade-in">
-                                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
-                                                <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                                </svg>
-                                            </div>
-                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to continue</h3>
-                                            <p className="text-sm text-[var(--foreground-muted)] mb-4">
-                                                Authentication required to configure bots, test guardrails, and save your evaluation history.
-                                            </p>
-                                            <button className="btn-primary px-6 py-2.5 text-sm font-medium">
-                                                Click anywhere to sign in
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
 
                             {/* Tab Headers */}
                             <div className="border-b border-[var(--border)] mb-6">
