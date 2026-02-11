@@ -399,8 +399,8 @@ function HomeContent() {
                         className={`bg-surface border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative ${
                             isSidebarExpanded || isSidebarHovered ? 'w-64' : 'w-16'
                         }`}
-                        onMouseEnter={() => setIsSidebarHovered(true)}
-                        onMouseLeave={() => setIsSidebarHovered(false)}
+                        onMouseEnter={() => isAuthenticated && setIsSidebarHovered(true)}
+                        onMouseLeave={() => isAuthenticated && setIsSidebarHovered(false)}
                     >
                         {/* Auth Overlay for Sidebar */}
                         {!isAuthenticated && !isLoading && (
@@ -409,8 +409,9 @@ function HomeContent() {
 
                         {/* Toggle Button - Vertically Centered */}
                         <button
-                            onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
-                            className="absolute top-1/2 -translate-y-1/2 right-1 p-1.5 rounded-md hover:bg-sidebar-hover text-foreground transition-all z-10 border border-[var(--border)] bg-[var(--surface)] shadow-sm"
+                            onClick={() => isAuthenticated && setIsSidebarExpanded(!isSidebarExpanded)}
+                            disabled={!isAuthenticated}
+                            className="absolute top-1/2 -translate-y-1/2 right-1 p-1.5 rounded-md hover:bg-sidebar-hover text-foreground transition-all z-10 border border-[var(--border)] bg-[var(--surface)] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
                             title={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
                         >
                             <svg
