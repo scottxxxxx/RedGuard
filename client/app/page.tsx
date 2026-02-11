@@ -496,6 +496,8 @@ function HomeContent() {
                                                     onClearConsole={handleClearConsole}
                                                     onKoreSessionUpdate={setKoreSessionId}
                                                     userId={userId}
+                                                    isAuthenticated={isAuthenticated}
+                                                    onAuthRequired={() => setShowSignInModal(true)}
                                                 />
                                             </div>
                                             <div className="col-span-8 h-full min-h-0">
@@ -509,7 +511,9 @@ function HomeContent() {
                                                     koreSessionId={koreSessionId}
                                                     onSessionReset={handleSessionReset}
                                                     onBotResponse={handleBotResponse}
-                                                    onKoreSessionUpdate={setKoreSessionId}
+                                                    onKoreSessionUpdate={setKoreSessionUpdate}
+                                                    isAuthenticated={isAuthenticated}
+                                                    onAuthRequired={() => setShowSignInModal(true)}
                                                 />
                                             </div>
                                         </div>

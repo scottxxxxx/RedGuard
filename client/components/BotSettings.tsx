@@ -19,9 +19,11 @@ interface Props {
     onClearConsole?: () => void;
     onKoreSessionUpdate?: (sessionId: string) => void;
     userId?: string;
+    isAuthenticated?: boolean;
+    onAuthRequired?: () => void;
 }
 
-export default function BotSettings({ onConfigChange, onConnect, onSessionReset, onClearConsole, onKoreSessionUpdate, userId }: Props) {
+export default function BotSettings({ onConfigChange, onConnect, onSessionReset, onClearConsole, onKoreSessionUpdate, userId, isAuthenticated, onAuthRequired }: Props) {
     const { showToast } = useNotification();
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
@@ -311,6 +313,12 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
             <div className="mt-5 pt-4 border-t border-[var(--border)]">
                 <button
                     onClick={async () => {
+                        // Check authentication first
+                        if (!isAuthenticated && onAuthRequired) {
+                            onAuthRequired();
+                            return;
+                        }
+
                         // Validate that webhook URL is complete before attempting connection
                         if (config.webhookUrl.endsWith('/webhook/')) {
                             showToast(
