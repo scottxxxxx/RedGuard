@@ -402,6 +402,11 @@ function HomeContent() {
                         onMouseEnter={() => setIsSidebarHovered(true)}
                         onMouseLeave={() => setIsSidebarHovered(false)}
                     >
+                        {/* Auth Overlay for Sidebar */}
+                        {!isAuthenticated && !isLoading && (
+                            <div className="absolute inset-0 bg-[var(--surface)]/95 backdrop-blur-sm z-50 pointer-events-all" />
+                        )}
+
                         {/* Toggle Button - Vertically Centered */}
                         <button
                             onClick={() => setIsSidebarExpanded(!isSidebarExpanded)}
