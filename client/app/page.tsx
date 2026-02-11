@@ -404,7 +404,7 @@ function HomeContent() {
                     >
                         {/* Auth Overlay for Sidebar */}
                         {!isAuthenticated && !isLoading && (
-                            <div className="absolute inset-0 bg-[var(--surface)]/95 backdrop-blur-sm z-50 pointer-events-all" />
+                            <div className="absolute inset-0 bg-[var(--surface)]/70 backdrop-blur-[1px] z-50 pointer-events-all" />
                         )}
 
                         {/* Toggle Button - Vertically Centered */}
@@ -468,7 +468,7 @@ function HomeContent() {
                     <main className="flex-1 overflow-auto bg-[var(--background)] p-8 relative">
                         {/* Auth Blocking Overlay */}
                         {!isAuthenticated && !isLoading && (
-                            <div className="absolute inset-0 bg-[var(--background)]/95 backdrop-blur-sm z-50 flex items-center justify-center">
+                            <div className="absolute inset-0 bg-[var(--background)]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
                                 <div className="bg-[var(--surface)] rounded-2xl shadow-2xl border-2 border-[var(--primary-500)] p-8 max-w-md text-center animate-fade-in">
                                     {/* Google Logo */}
                                     <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
