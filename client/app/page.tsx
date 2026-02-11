@@ -12,6 +12,7 @@ import RunHistory from "@/components/RunHistory";
 import LogViewer from "@/components/LogViewer";
 import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
+import AuthButton from "@/components/AuthButton";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
 import { useUser } from "@/contexts/UserContext";
@@ -357,6 +358,7 @@ function HomeContent() {
                                 <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.0</span>
                             </div>
                             <div className="flex items-center gap-4">
+                                <AuthButton />
                                 <ThemeSwitcher />
                             </div>
                         </div>

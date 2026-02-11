@@ -1,45 +1,38 @@
 "use client";
 
-import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { v4 as uuidv4 } from 'uuid';
+import { createContext, useContext, ReactNode } from 'react';
+import { useSession } from 'next-auth/react';
 
 interface UserContextType {
   userId: string;
   userName: string | null;
-  setUserName: (name: string) => void;
+  userEmail: string | null;
+  userImage: string | null;
+  isLoading: boolean;
+  isAuthenticated: boolean;
 }
 
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 export function UserProvider({ children }: { children: ReactNode }) {
-  const [userId, setUserId] = useState<string>('');
-  const [userName, setUserNameState] = useState<string | null>(null);
+  const { data: session, status } = useSession();
 
-  useEffect(() => {
-    // Get or create user ID from localStorage
-    let storedUserId = localStorage.getItem('redguard_user_id');
-
-    if (!storedUserId) {
-      storedUserId = uuidv4();
-      localStorage.setItem('redguard_user_id', storedUserId);
-    }
-
-    setUserId(storedUserId);
-
-    // Get username if set
-    const storedName = localStorage.getItem('redguard_user_name');
-    if (storedName) {
-      setUserNameState(storedName);
-    }
-  }, []);
-
-  const setUserName = (name: string) => {
-    setUserNameState(name);
-    localStorage.setItem('redguard_user_name', name);
-  };
+  const userId = session?.user?.email || 'anonymous';
+  const userName = session?.user?.name || null;
+  const userEmail = session?.user?.email || null;
+  const userImage = session?.user?.image || null;
+  const isLoading = status === 'loading';
+  const isAuthenticated = status === 'authenticated';
 
   return (
-    <UserContext.Provider value={{ userId, userName, setUserName }}>
+    <UserContext.Provider value={{
+      userId,
+      userName,
+      userEmail,
+      userImage,
+      isLoading,
+      isAuthenticated
+    }}>
       {children}
     </UserContext.Provider>
   );
