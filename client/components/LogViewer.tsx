@@ -90,7 +90,6 @@ export default function LogViewer() {
         switch (type) {
             case 'kore_chat': return 'bg-badge-blue-bg text-badge-blue-text';
             case 'llm_evaluate': return 'bg-badge-purple-bg text-badge-purple-text';
-            case 'garak': return 'bg-badge-orange-bg text-badge-orange-text';
             default: return 'bg-badge-gray-bg text-badge-gray-text';
         }
     };
@@ -151,7 +150,6 @@ export default function LogViewer() {
                     <option value="">All Types</option>
                     <option value="kore_chat">Kore.AI Chat</option>
                     <option value="llm_evaluate">LLM Evaluation</option>
-                    <option value="garak">Garak</option>
                 </select>
                 <select
                     value={filter.isError}
