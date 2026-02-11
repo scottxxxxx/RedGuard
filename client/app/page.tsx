@@ -17,6 +17,7 @@ import SignInModal from "@/components/SignInModal";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
 import { useUser } from "@/contexts/UserContext";
+import { signIn } from "next-auth/react";
 
 // Composite type for ChatConsole
 export type CompositeGuardrailConfig = GuardrailPolicy & {
