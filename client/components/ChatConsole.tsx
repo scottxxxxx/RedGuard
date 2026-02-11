@@ -16,9 +16,11 @@ interface Props {
     onKoreSessionUpdate?: (sessionId: string) => void;  // Callback to pass Kore's session ID to parent
     isAuthenticated?: boolean;
     onAuthRequired?: () => void;
+    isConnecting?: boolean;
+    isConnected?: boolean;
 }
 
-export default function ChatConsole({ config, botConfig, onInteractionUpdate, messages, setMessages, userId, koreSessionId, onSessionReset, onBotResponse, onKoreSessionUpdate, isAuthenticated, onAuthRequired }: Props) {
+export default function ChatConsole({ config, botConfig, onInteractionUpdate, messages, setMessages, userId, koreSessionId, onSessionReset, onBotResponse, onKoreSessionUpdate, isAuthenticated, onAuthRequired, isConnecting, isConnected }: Props) {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
     const [showAttackMenu, setShowAttackMenu] = useState(false);
@@ -285,9 +287,10 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                         type="text"
                         value={input}
                         onChange={(e) => setInput(e.target.value)}
-                        onKeyDown={(e) => e.key === 'Enter' && sendMessage()}
-                        placeholder="Type a message to test..."
-                        className="input flex-1 text-sm text-[var(--foreground)]"
+                        onKeyDown={(e) => e.key === 'Enter' && !isConnecting && isConnected && sendMessage()}
+                        placeholder={!isConnected ? "Connect to bot first..." : "Type a message to test..."}
+                        disabled={!isConnected || isConnecting}
+                        className="input flex-1 text-sm text-[var(--foreground)] disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <button
                         onClick={() => {
@@ -307,8 +310,14 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                     </button>
                     <button
                         onClick={sendMessage}
-                        disabled={loading}
+                        disabled={loading || !isConnected || isConnecting}
                         className="btn-primary px-4 py-2 text-sm flex items-center gap-2"
+                        title={
+                            isConnecting ? "Connecting to bot..." :
+                            !isConnected ? "Connect to a bot first" :
+                            loading ? "Sending..." :
+                            "Send message"
+                        }
                     >
                         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" />

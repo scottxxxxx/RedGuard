@@ -15,8 +15,12 @@ class KoreService {
     }
 
     generateJWT(configOverride = {}) {
-        const clientId = configOverride.clientId || this.clientId;
-        const clientSecret = configOverride.clientSecret || this.clientSecret;
+        // Only use env vars if NO override config is provided at all
+        // If configOverride exists, use ONLY those values (don't fall back to env)
+        const useEnvFallback = !configOverride || Object.keys(configOverride).length === 0;
+
+        const clientId = useEnvFallback ? this.clientId : configOverride.clientId;
+        const clientSecret = useEnvFallback ? this.clientSecret : configOverride.clientSecret;
 
         if (!clientId || !clientSecret) {
             throw new Error("Missing Kore.AI Client ID or Secret");
@@ -43,8 +47,12 @@ class KoreService {
             const tokenGenerator = this.generateJWT(configOverride);
             const token = tokenGenerator(userId);
 
-            const botId = configOverride?.botId || this.botId;
-            const webhookUrl = configOverride?.webhookUrl || this.webhookUrl;
+            // Only use env vars if NO override config is provided
+            const useEnvFallback = !configOverride || Object.keys(configOverride).length === 0;
+            const botId = useEnvFallback ? this.botId : configOverride.botId;
+            const webhookUrl = useEnvFallback ? this.webhookUrl : configOverride.webhookUrl;
+
+            console.log(`[KoreService] Using ${useEnvFallback ? 'ENV' : 'OVERRIDE'} config - Bot ID: ${botId}, Client ID: ${useEnvFallback ? this.clientId : configOverride.clientId}`);
 
             const payload = {
                 session: sessionDetails,

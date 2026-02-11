@@ -18,12 +18,13 @@ interface Props {
     onSessionReset?: () => void;
     onClearConsole?: () => void;
     onKoreSessionUpdate?: (sessionId: string) => void;
+    onConnectingChange?: (isConnecting: boolean) => void;
     userId?: string;
     isAuthenticated?: boolean;
     onAuthRequired?: () => void;
 }
 
-export default function BotSettings({ onConfigChange, onConnect, onSessionReset, onClearConsole, onKoreSessionUpdate, userId, isAuthenticated, onAuthRequired }: Props) {
+export default function BotSettings({ onConfigChange, onConnect, onSessionReset, onClearConsole, onKoreSessionUpdate, onConnectingChange, userId, isAuthenticated, onAuthRequired }: Props) {
     const { showToast } = useNotification();
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
@@ -39,6 +40,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
     const [isValidating, setIsValidating] = useState(false);
     const [validationStatus, setValidationStatus] = useState<'idle' | 'success' | 'error'>('idle');
     const [validationMessage, setValidationMessage] = useState<string | null>(null);
+    const [lastValidatedConfig, setLastValidatedConfig] = useState<BotConfig | null>(null);
 
     // Force reset validation state on mount to prevent stuck spinner
     useEffect(() => {
@@ -70,8 +72,39 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
             onKoreSessionUpdate(data.sessionId);
         }
 
-        if (data.data?.[0]?.val && onConnect) {
-            onConnect(data.data[0].val);
+        // Try to get welcome message from connection response
+        let greetingMessage = data.data?.[0]?.val;
+
+        // If no automatic greeting, send a greeting request to trigger welcome
+        if (!greetingMessage) {
+            try {
+                const greetingRes = await fetch(`${apiUrl.replace('/init', '/send')}`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        message: 'Hi',
+                        userId: userId || `RedGuard-init-${Math.random().toString(36).substring(7)}`,
+                        botConfig: currentConfig
+                    })
+                });
+
+                if (greetingRes.ok) {
+                    const greetingData = await greetingRes.json();
+                    if (greetingData.data && Array.isArray(greetingData.data) && greetingData.data.length > 0) {
+                        greetingMessage = greetingData.data
+                            .map((msg: any) => msg.val || msg.text || JSON.stringify(msg))
+                            .join('\n');
+                    }
+                }
+            } catch (greetingError) {
+                console.log('[BotSettings] Could not get greeting:', greetingError);
+                // Fallback greeting if bot doesn't respond
+                greetingMessage = 'Connected to bot. You can start chatting now.';
+            }
+        }
+
+        if (greetingMessage && onConnect) {
+            onConnect(greetingMessage);
         }
     };
 
@@ -117,6 +150,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
 
             setValidationStatus('success');
             setValidationMessage('Connection validated successfully');
+            setLastValidatedConfig(currentConfig); // Store validated config
         } catch (err: any) {
             setValidationStatus('error');
             const errorMessage = err.message || 'Unknown validation error';
@@ -329,18 +363,44 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                             return;
                         }
 
-                        // Clear console immediately when user clicks Connect
-                        // This just clears messages and session ID, not userId
+                        //Check if credentials have changed since last validation
+                        const credentialsChanged = lastValidatedConfig && (
+                            lastValidatedConfig.clientId !== config.clientId ||
+                            lastValidatedConfig.clientSecret !== config.clientSecret ||
+                            lastValidatedConfig.botId !== config.botId ||
+                            lastValidatedConfig.webhookUrl !== config.webhookUrl
+                        );
+
+                        if (credentialsChanged) {
+                            // Credentials changed - clear old validation and force revalidation
+                            setValidationStatus('idle');
+                            setValidationMessage(null);
+                            setLastValidatedConfig(null);
+                        }
+
+                        // Clear console and reset session immediately when user clicks Connect
+                        // This ensures we start fresh and don't reuse old sessions
                         if (onClearConsole) onClearConsole();
+                        if (onSessionReset) onSessionReset();
+
+                        // Notify parent that connection is starting
+                        if (onConnectingChange) onConnectingChange(true);
 
                         setIsValidating(true);
-                        // Safety timeout to ensure button always resets
+                        // Safety timeout to ensure button always resets (longer than Promise.race timeout)
                         const timeout = setTimeout(() => {
                             console.warn('[BotSettings] Connection timeout - resetting button');
                             setIsValidating(false);
-                        }, 10000); // 10 second timeout
+                            if (onConnectingChange) onConnectingChange(false);
+                            setValidationStatus('error');
+                            setValidationMessage('Connection timed out - please try again');
+                        }, 20000); // 20 second timeout (longer than the 15s Promise.race timeout)
 
                         try {
+                            // Clear any previous successful state to force fresh validation
+                            setValidationStatus('idle');
+                            setValidationMessage(null);
+
                             // Validate first (fast, fails early on config errors)
                             await validateConnection(config);
 
@@ -354,8 +414,13 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                         } catch (err: any) {
                             console.error('[BotSettings] Connection error:', err);
 
+                            // Set validation status to error
+                            setValidationStatus('error');
+
                             // Provide specific error messages with troubleshooting guidance
                             if (err?.message?.includes('Bot ID mismatch')) {
+                                const msg = 'Bot ID mismatch - Bot ID must match the ID in the Webhook URL';
+                                setValidationMessage(msg);
                                 showToast(
                                     'Bot ID mismatch detected.\n\n' +
                                     'The Bot ID you entered does not match the Bot ID in the Webhook URL.\n\n' +
@@ -365,6 +430,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                                     'error'
                                 );
                             } else if (err?.message === 'Connection timeout') {
+                                setValidationMessage('Connection timeout - verify network and webhook URL');
                                 showToast(
                                     'Connection timed out after 15 seconds. This usually means:\n' +
                                     '• Network connectivity issues\n' +
@@ -373,7 +439,8 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                                     'Please verify your credentials and try again.',
                                     'error'
                                 );
-                            } else if (err?.message?.includes('401') || err?.message?.includes('Unauthorized')) {
+                            } else if (err?.message?.includes('401') || err?.message?.includes('Unauthorized') || err?.message?.includes('Invalid SDK credentials')) {
+                                setValidationMessage('Authentication failed - verify Client ID and Client Secret');
                                 showToast(
                                     'Authentication failed (401 Unauthorized).\n\n' +
                                     'Troubleshooting:\n' +
@@ -383,6 +450,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                                     'error'
                                 );
                             } else if (err?.message?.includes('404') || err?.message?.includes('Not Found')) {
+                                setValidationMessage('Bot not found - verify Bot ID');
                                 showToast(
                                     'Bot not found (404).\n\n' +
                                     'Troubleshooting:\n' +
@@ -442,6 +510,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                         } finally {
                             clearTimeout(timeout);
                             setIsValidating(false);
+                            if (onConnectingChange) onConnectingChange(false);
                         }
                     }}
                     disabled={isValidating || webhookIsIncomplete}

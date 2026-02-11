@@ -106,12 +106,7 @@ router.post('/validate', async (req, res) => {
                 { new: true },
                 botConfig
             );
-
-            // If we got here, everything works
-            res.json({
-                valid: true,
-                message: "Credentials and webhook validated successfully"
-            });
+            console.log(`[Validation] Webhook connection successful`);
         } catch (webhookError) {
             // Credentials are good, but webhook connection failed
             console.error("Webhook connection failed:", webhookError.message);
@@ -126,13 +121,43 @@ router.post('/validate', async (req, res) => {
                 throw new Error(`Webhook validation failed (credentials are valid): ${webhookError.message}`);
             }
         }
+
+        // Step 3: Validate Gen AI Logs API access (REQUIRED for RedGuard evaluation)
+        try {
+            const now = new Date();
+            const oneHourAgo = new Date(now.getTime() - 60 * 60 * 1000);
+
+            // Test with minimal date range - we don't care about results, just API access
+            await koreApiService.getLLMUsageLogs(botConfig, {
+                dateFrom: oneHourAgo.toISOString(),
+                dateTo: now.toISOString(),
+                limit: 1
+            });
+            console.log(`[Validation] Gen AI Logs API access confirmed`);
+
+            // If we got here, everything works
+            res.json({
+                valid: true,
+                message: "All validations passed: credentials, webhook, and Gen AI Logs API"
+            });
+        } catch (logsError) {
+            console.error("Gen AI Logs API validation failed:", logsError.message);
+
+            if (logsError.message.includes('401') || logsError.message.includes('403') || logsError.message.includes('Authentication Failed')) {
+                throw new Error("Gen AI Logs API access denied - Please go to your Kore.ai App settings → API Scopes and enable 'Gen AI and LLM Usage Logs'. This scope is REQUIRED for RedGuard to evaluate bot responses.");
+            } else {
+                throw new Error(`Gen AI Logs API validation failed: ${logsError.message}`);
+            }
+        }
     } catch (error) {
         console.error("Kore Validation Error:", error.message);
 
         // Return appropriate status code based on error type
         let statusCode = 500; // Default to server error
 
-        if (error.message.includes('Invalid credentials') || error.message.includes('401') || error.message.includes('403')) {
+        if (error.message.includes('Gen AI Logs API access denied')) {
+            statusCode = 403; // Forbidden - API scope not provisioned
+        } else if (error.message.includes('Invalid credentials') || error.message.includes('401') || error.message.includes('403')) {
             statusCode = 401;
         } else if (error.message.includes('not found') || error.message.includes('404')) {
             statusCode = 404;

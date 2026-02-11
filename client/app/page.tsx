@@ -62,6 +62,10 @@ function HomeContent() {
     // Auth modal state
     const [showSignInModal, setShowSignInModal] = useState(false);
 
+    // Bot connection state
+    const [isConnecting, setIsConnecting] = useState(false);
+    const [isConnected, setIsConnected] = useState(false);
+
     // Check auth before allowing interaction
     const requireAuth = useCallback((action: () => void) => {
         if (!isAuthenticated) {
@@ -80,6 +84,9 @@ function HomeContent() {
     }, []);
 
     const handleBotConnect = (greeting: string) => {
+        // Mark as connected
+        setIsConnected(true);
+
         // If we already have messages, don't show greeting again
         if (messages.length === 0) {
             setMessages([{
@@ -107,6 +114,7 @@ function HomeContent() {
 
     const handleSessionReset = () => {
         setKoreSessionId(null);  // Reset Kore session ID
+        setIsConnected(false);  // Mark as disconnected
         llmInspectorRef.current?.clearLogs();  // Clear the logs display
         setMessages([]);
         setInteraction(null);
@@ -115,6 +123,7 @@ function HomeContent() {
     const handleClearConsole = () => {
         // Just clear the console display without resetting userId
         setKoreSessionId(null);
+        setIsConnected(false);  // Mark as disconnected
         setMessages([]);
     };
 
@@ -449,10 +458,37 @@ function HomeContent() {
                     </aside>
 
                     {/* Main Content Area */}
-                    <main className="flex-1 overflow-auto bg-[var(--background)] p-8">
+                    <main className="flex-1 overflow-auto bg-[var(--background)] p-8 relative">
                         {/* Evaluator View */}
                         <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
                             <RedGuardIntro />
+
+                            {/* Auth Overlay - Blocks everything except hero section */}
+                            {!isAuthenticated && !isLoading && (
+                                <div
+                                    className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer"
+                                    onClick={() => setShowSignInModal(true)}
+                                    style={{ top: '280px' }} // Positioned below hero section
+                                >
+                                    <div className="flex items-start justify-center pt-12">
+                                        <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center animate-fade-in">
+                                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
+                                                <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to continue</h3>
+                                            <p className="text-sm text-[var(--foreground-muted)] mb-4">
+                                                Authentication required to configure bots, test guardrails, and save your evaluation history.
+                                            </p>
+                                            <button className="btn-primary px-6 py-2.5 text-sm font-medium">
+                                                Click anywhere to sign in
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
 
                             {/* Tab Headers */}
                             <div className="border-b border-[var(--border)] mb-6">
@@ -495,6 +531,7 @@ function HomeContent() {
                                                     onSessionReset={handleSessionReset}
                                                     onClearConsole={handleClearConsole}
                                                     onKoreSessionUpdate={setKoreSessionId}
+                                                    onConnectingChange={setIsConnecting}
                                                     userId={userId}
                                                     isAuthenticated={isAuthenticated}
                                                     onAuthRequired={() => setShowSignInModal(true)}
@@ -514,6 +551,8 @@ function HomeContent() {
                                                     onKoreSessionUpdate={setKoreSessionId}
                                                     isAuthenticated={isAuthenticated}
                                                     onAuthRequired={() => setShowSignInModal(true)}
+                                                    isConnecting={isConnecting}
+                                                    isConnected={isConnected}
                                                 />
                                             </div>
                                         </div>
@@ -660,16 +699,42 @@ function HomeContent() {
                             </div>
 
                             {/* Batch Tab Content */}
-                            <div className={activeTab === 'batch' ? '' : 'hidden'}>
+                            <div className={activeTab === 'batch' ? 'relative' : 'hidden'}>
                                 <BatchTester
                                     botConfig={botConfig}
                                     guardrailConfig={fullGuardrailConfig}
                                 />
+
+                                {/* Auth Overlay for Batch Tab */}
+                                {!isAuthenticated && !isLoading && (
+                                    <div
+                                        className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer rounded-lg"
+                                        onClick={() => setShowSignInModal(true)}
+                                    >
+                                        <div className="flex items-center justify-center h-full">
+                                            <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
+                                                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
+                                                    <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                                    </svg>
+                                                </div>
+                                                <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to use Batch Tester</h3>
+                                                <p className="text-sm text-[var(--foreground-muted)] mb-4">
+                                                    Authentication required to run batch tests and save results.
+                                                </p>
+                                                <button className="btn-primary px-6 py-2.5 text-sm font-medium">
+                                                    Click to sign in
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
                             </div>
                         </div>
 
                         {/* Logs View */}
-                        <div className={`w-full ${currentView === 'logs' ? '' : 'hidden'}`}>
+                        <div className={`w-full relative ${currentView === 'logs' ? '' : 'hidden'}`}>
                             <header className="mb-8">
                                 <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">System Logs</h1>
                                 <p className="text-sm text-[var(--foreground-muted)]">View real-time backend and application logs</p>
@@ -681,6 +746,33 @@ function HomeContent() {
                                     <LogViewer />
                                 </div>
                             </div>
+
+                            {/* Auth Overlay for Logs View */}
+                            {!isAuthenticated && !isLoading && (
+                                <div
+                                    className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer"
+                                    onClick={() => setShowSignInModal(true)}
+                                    style={{ top: '120px' }} // Positioned below header
+                                >
+                                    <div className="flex items-start justify-center pt-12">
+                                        <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
+                                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
+                                                <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                                </svg>
+                                            </div>
+                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to view logs</h3>
+                                            <p className="text-sm text-[var(--foreground-muted)] mb-4">
+                                                Authentication required to access system logs and diagnostic information.
+                                            </p>
+                                            <button className="btn-primary px-6 py-2.5 text-sm font-medium">
+                                                Click to sign in
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </main>
                 </div>
