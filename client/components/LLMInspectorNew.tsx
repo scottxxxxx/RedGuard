@@ -57,7 +57,8 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     botConfig,
-                    filters
+                    filters,
+                    userId: userId || 'unknown'
                 })
             });
             const data = await res.json();

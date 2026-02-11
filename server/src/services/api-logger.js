@@ -18,6 +18,7 @@ class ApiLogger {
     /**
      * Log an API request/response
      * @param {object} params
+     * @param {string} params.userId - User ID (email from Google auth)
      * @param {string} params.logType - 'kore_chat', 'llm_evaluate', 'garak'
      * @param {string} params.method - HTTP method
      * @param {string} params.endpoint - URL or endpoint
@@ -33,6 +34,7 @@ class ApiLogger {
      * @param {string} params.sessionId - Optional session ID override
      */
     async log({
+        userId,
         logType,
         method,
         endpoint,
@@ -58,6 +60,7 @@ class ApiLogger {
 
             const logEntry = await prisma.apiLog.create({
                 data: {
+                    userId,
                     logType,
                     method,
                     endpoint: endpoint?.substring(0, 500), // Limit URL length
@@ -161,6 +164,7 @@ class ApiLogger {
         logType,
         isError,
         provider,
+        userId,
         startDate,
         endDate,
         limit = 100,
@@ -171,6 +175,7 @@ class ApiLogger {
         if (logType) where.logType = logType;
         if (isError !== undefined) where.isError = isError;
         if (provider) where.provider = provider;
+        if (userId) where.userId = { contains: userId };
         if (startDate || endDate) {
             where.timestamp = {};
             if (startDate) where.timestamp.gte = new Date(startDate);

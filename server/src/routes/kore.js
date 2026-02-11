@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const koreApiService = require('../services/kore-api');
+const apiLogger = require('../services/api-logger');
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
@@ -8,9 +9,11 @@ const prisma = new PrismaClient();
 console.log('Prisma models:', Object.keys(prisma));
 
 router.post('/llm-logs', async (req, res) => {
-    try {
-        const { botConfig, filters } = req.body;
+    const startTime = Date.now();
+    const { botConfig, filters, userId } = req.body;
+    const explicitUserId = userId || botConfig?.userId || 'unknown';
 
+    try {
         // Basic Validation
         if (!botConfig || !botConfig.host || !botConfig.botId || !botConfig.clientId || !botConfig.clientSecret) {
             return res.status(400).json({
@@ -61,9 +64,39 @@ router.post('/llm-logs', async (req, res) => {
             await Promise.all(savePromises);
         }
 
+        // Log successful Gen AI logs retrieval
+        await apiLogger.log({
+            userId: explicitUserId,
+            logType: 'kore_genAI_logs',
+            method: 'POST',
+            endpoint: '/api/kore/llm-logs',
+            requestBody: { filters, botConfig: { ...botConfig, clientSecret: '[REDACTED]' } },
+            statusCode: 200,
+            responseBody: { count: logs?.length || 0 },
+            latencyMs: Date.now() - startTime,
+            isError: false,
+            provider: 'kore'
+        });
+
         res.json(logs);
     } catch (error) {
         console.error("Kore API Error:", error.message);
+
+        // Log failed Gen AI logs retrieval
+        await apiLogger.log({
+            userId: explicitUserId,
+            logType: 'kore_genAI_logs',
+            method: 'POST',
+            endpoint: '/api/kore/llm-logs',
+            requestBody: { filters, botConfig: botConfig ? { ...botConfig, clientSecret: '[REDACTED]' } : null },
+            statusCode: error.response?.status || 500,
+            responseBody: error.response?.data || { error: error.message },
+            latencyMs: Date.now() - startTime,
+            isError: true,
+            errorMessage: error.message,
+            provider: 'kore'
+        });
+
         res.status(500).json({
             error: error.message,
             details: error.response?.data
@@ -73,7 +106,8 @@ router.post('/llm-logs', async (req, res) => {
 
 router.post('/validate', async (req, res) => {
     try {
-        const { botConfig } = req.body;
+        const { botConfig, userId } = req.body;
+        const explicitUserId = userId || 'unknown';
 
         if (!botConfig) {
             return res.status(400).json({ error: "No configuration provided." });
@@ -135,6 +169,20 @@ router.post('/validate', async (req, res) => {
             });
             console.log(`[Validation] Gen AI Logs API access confirmed`);
 
+            // Log successful validation
+            await apiLogger.log({
+                userId: explicitUserId,
+                logType: 'kore_validate',
+                method: 'POST',
+                endpoint: '/api/kore/validate',
+                requestBody: { botConfig: { ...botConfig, clientSecret: '[REDACTED]' } },
+                statusCode: 200,
+                responseBody: { valid: true, message: "All validations passed" },
+                latencyMs: 0,
+                isError: false,
+                provider: 'kore'
+            });
+
             // If we got here, everything works
             res.json({
                 valid: true,
@@ -164,6 +212,21 @@ router.post('/validate', async (req, res) => {
         } else if (error.message.includes('unreachable') || error.message.includes('ENOTFOUND')) {
             statusCode = 503; // Service Unavailable
         }
+
+        // Log failed validation
+        await apiLogger.log({
+            userId: explicitUserId,
+            logType: 'kore_validate',
+            method: 'POST',
+            endpoint: '/api/kore/validate',
+            requestBody: { botConfig: botConfig ? { ...botConfig, clientSecret: '[REDACTED]' } : null },
+            statusCode: statusCode,
+            responseBody: { error: error.message },
+            latencyMs: 0,
+            isError: true,
+            errorMessage: error.message,
+            provider: 'kore'
+        });
 
         res.status(statusCode).json({
             error: error.message

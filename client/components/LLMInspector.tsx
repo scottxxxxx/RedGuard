@@ -41,7 +41,8 @@ export default function LLMInspector({ botConfig, userId }: Props) {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({
                     botConfig,
-                    filters
+                    filters,
+                    userId: userId || 'unknown'
                 })
             });
             const data = await res.json();
