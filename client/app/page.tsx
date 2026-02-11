@@ -13,6 +13,7 @@ import LogViewer from "@/components/LogViewer";
 import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import AuthButton from "@/components/AuthButton";
+import SignInGate from "@/components/SignInGate";
 import { NotificationProvider, useNotification } from "@/context/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
 import { useUser } from "@/contexts/UserContext";
@@ -25,7 +26,7 @@ export type CompositeGuardrailConfig = GuardrailPolicy & {
 type ViewType = 'evaluator' | 'logs';
 
 function HomeContent() {
-    const { userId } = useUser();
+    const { userId, isAuthenticated, isLoading } = useUser();
     const [currentView, setCurrentView] = useState<ViewType>('evaluator');
 
     const [guardrailPolicy, setGuardrailPolicy] = useState<GuardrailPolicy | null>(null);
@@ -365,11 +366,14 @@ function HomeContent() {
                     </div>
                 </nav>
 
-                {/* Sidebar + Main Content Layout */}
-                <div className="flex flex-1 overflow-hidden">
+                {/* Authentication Gate or Main Content */}
+                {!isAuthenticated ? (
+                    <SignInGate />
+                ) : (
+                    <div className="flex flex-1 overflow-hidden">
 
-                    {/* Sidebar */}
-                    <aside
+                        {/* Sidebar */}
+                        <aside
                         className={`bg-surface border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative ${
                             isSidebarExpanded || isSidebarHovered ? 'w-64' : 'w-16'
                         }`}
@@ -663,7 +667,8 @@ function HomeContent() {
                             </div>
                         </div>
                     </main>
-                </div>
+                    </div>
+                )}
         </div>
     );
 }
