@@ -110,8 +110,9 @@ jobs:
               redguard_data:
             EOF
 
-            # Prune simply to free up space (aggressive cleanup)
-            sudo docker system prune -af
+            # Prune aggressively to free up space (system + volumes)
+            # CAUTION: This removes unnamed volumes. Ensure data is in named volumes or host mounts.
+            sudo docker system prune -af --volumes
 
             # Pull latest images and restart (using sudo)
             sudo docker compose -f docker-compose.prod.yml pull
