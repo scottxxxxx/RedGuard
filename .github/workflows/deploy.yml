@@ -72,7 +72,22 @@ jobs:
           timeout: 30m
           command_timeout: 30m
           script: |
-            # Login to GHCR on the server (using sudo for docker)
+            # ------------------------------------------------------------------
+            # STEP 0: AGGRESSIVE CLEANUP FIRST
+            # ------------------------------------------------------------------
+            echo "Starting pre-deployment cleanup..."
+            # Stop all running containers (ignore errors if none running)
+            sudo docker stop $(sudo docker ps -aq) 2>/dev/null || true
+            # Remove all containers
+            sudo docker rm $(sudo docker ps -aq) 2>/dev/null || true
+            # Prune everything (images, volumes, networks)
+            sudo docker system prune -af --volumes
+            echo "Cleanup complete. Disk Usage:"
+            df -h
+
+            # ------------------------------------------------------------------
+            # STEP 1: Login to GHCR
+            # ------------------------------------------------------------------
             echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Create/Update the docker-compose.prod.yml on the server
