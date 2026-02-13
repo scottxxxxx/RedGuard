@@ -2,10 +2,36 @@ const express = require('express');
 const router = express.Router();
 const promptService = require('../services/prompt-service');
 
-// Get default prompt template
+// Get all available default templates (universal + model-specific)
+router.get('/defaults', async (req, res) => {
+    try {
+        const defaults = await promptService.getAllDefaults();
+        res.json(defaults);
+    } catch (err) {
+        console.error('Error fetching default templates:', err);
+        res.status(500).json({ error: 'Failed to fetch default templates' });
+    }
+});
+
+// Get a specific default template by key
+router.get('/defaults/:key', async (req, res) => {
+    try {
+        const template = await promptService.getDefaultByKey(req.params.key);
+        if (!template) {
+            return res.status(404).json({ error: 'Template not found' });
+        }
+        res.json(template);
+    } catch (err) {
+        console.error('Error fetching template by key:', err);
+        res.status(500).json({ error: 'Failed to fetch template' });
+    }
+});
+
+// Get default prompt template (model-aware)
 router.get('/default', async (req, res) => {
     try {
-        const prompt = await promptService.getDefaultPrompt();
+        const { provider, model } = req.query;
+        const prompt = await promptService.getDefaultPrompt(provider || null, model || null);
         res.json(prompt);
     } catch (err) {
         console.error('Error fetching default prompt:', err);

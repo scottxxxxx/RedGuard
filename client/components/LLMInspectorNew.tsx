@@ -6,6 +6,7 @@ interface Props {
     botConfig: BotConfig | null;
     userId?: string;
     koreSessionId?: string | null;  // Kore's internal session ID for filtering logs
+    onLogsUpdated?: () => void;  // Called when logs are fetched/updated
 }
 
 export interface LLMInspectorRef {
@@ -14,25 +15,18 @@ export interface LLMInspectorRef {
     getLogs: () => any[];
 }
 
-const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, koreSessionId }, ref) => {
+const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, koreSessionId, onLogsUpdated }, ref) => {
     const [logs, setLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedLog, setSelectedLog] = useState<any | null>(null);
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
-    const [isPolling, setIsPolling] = useState(false);
-    const [pollStartTime, setPollStartTime] = useState<number | null>(null);
-    const pollIntervalRef = useRef<NodeJS.Timeout | null>(null);
-
     const fetchLogs = useCallback(async () => {
         if (!botConfig) return;
 
         setIsLoading(true);
         setError(null);
         try {
-            // Use date range for last 2 days to ensure we capture recent logs
-            // Use precise timestamps to ensure we catch logs across UTC day boundaries
-            // Date-only strings can cause logs at 4 AM UTC (10 PM CST) to be missed if "end date" is interpreted as midnight
             const now = new Date();
 
             // Go back 24 hours to catch all recent sessions
@@ -44,7 +38,6 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
             future.setHours(future.getHours() + 2);
 
             const filters: any = {
-                // Formatting as 'YYYY-MM-DDTHH:mm:ss' which works reliably with Kore API
                 dateFrom: yesterday.toISOString().split('.')[0],
                 dateTo: future.toISOString().split('.')[0],
                 limit: "50"
@@ -73,75 +66,26 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
 
             setLogs(logArray);
             setLastUpdated(new Date());
-
-            // Stop polling if we found logs
-            if (logArray.length > 0 && isPolling) {
-                stopPolling();
-            }
+            if (logArray.length > 0) onLogsUpdated?.();
         } catch (err: any) {
             setError(err.message);
         } finally {
             setIsLoading(false);
         }
-    }, [botConfig, koreSessionId, isPolling]);
+    }, [botConfig, koreSessionId]);
 
-    const startPolling = useCallback(() => {
-        if (pollIntervalRef.current) return; // Already polling
-
-        setIsPolling(true);
-        setPollStartTime(Date.now());
-
-        // Initial fetch
-        fetchLogs();
-
-        // Poll every 15 seconds
-        pollIntervalRef.current = setInterval(fetchLogs, 15000);
-    }, [fetchLogs]);
-
-    const stopPolling = useCallback(() => {
-        if (pollIntervalRef.current) {
-            clearInterval(pollIntervalRef.current);
-            pollIntervalRef.current = null;
-        }
-        setIsPolling(false);
-        setPollStartTime(null);
-    }, []);
-
-    // Cleanup on unmount
-    useEffect(() => {
-        return () => stopPolling();
-    }, [stopPolling]);
-
-    // Auto-start polling when koreSessionId changes (new session)
+    // Reset logs when session changes
     useEffect(() => {
         if (koreSessionId) {
-            // Reset logs for new session
             setLogs([]);
-            // Start polling for logs
-            startPolling();
-        } else {
-            stopPolling();
         }
-    }, [koreSessionId, startPolling, stopPolling]);
-
-    // Timer for UI updates
-    useEffect(() => {
-        let interval: NodeJS.Timeout;
-        if (isPolling && pollStartTime) {
-            interval = setInterval(() => {
-                // Force re-render for timer
-                setLastUpdated(new Date());
-            }, 1000);
-        }
-        return () => clearInterval(interval);
-    }, [isPolling, pollStartTime]);
+    }, [koreSessionId]);
 
     // Expose refresh and clear functions to parent
     useImperativeHandle(ref, () => ({
         refreshLogs: fetchLogs,
         clearLogs: () => {
             setLogs([]);
-            stopPolling();
         },
         getLogs: () => logs
     }));
@@ -232,19 +176,13 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                         {koreSessionId ? (
                             <>
                                 <p>No logs found for this session yet.</p>
-                                {isPolling ? (
-                                    <p className="text-xs mt-2 text-[var(--primary-600)] animate-pulse">Checking for new logs...</p>
-                                ) : (
-                                    <>
-
-                                        <button
-                                            onClick={startPolling}
-                                            className="mt-3 text-xs bg-[var(--primary-50)] text-[var(--primary-600)] px-3 py-1 rounded border border-[var(--primary-200)] hover:bg-[var(--primary-100)]"
-                                        >
-                                            Start Auto-Polling
-                                        </button>
-                                    </>
-                                )}
+                                <p className="text-xs mt-2 text-[var(--foreground-muted)]">Logs will be fetched automatically after bot responses.</p>
+                                <button
+                                    onClick={fetchLogs}
+                                    className="mt-3 text-xs bg-[var(--primary-50)] text-[var(--primary-600)] px-3 py-1 rounded border border-[var(--primary-200)] hover:bg-[var(--primary-100)]"
+                                >
+                                    Fetch Logs Now
+                                </button>
                             </>
                         ) : (
                             <>

@@ -2,7 +2,7 @@ const llmJudge = require('./llm-judge');
 
 class GuardrailLogic {
 
-    async evaluateResponse(userInput, botResponse, config, history = [], hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = []) {
+    async evaluateResponse(userInput, botResponse, config, history = [], hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], userId = null) {
         const results = [];
         let overallPass = true;
         let activeSet = new Set(config.activeGuardrails);
@@ -52,11 +52,13 @@ class GuardrailLogic {
             model: config.llmConfig.model,
             history,
             customPrompt: config.llmConfig.customPrompt,
+            customSystemPrompt: config.llmConfig.systemPrompt,
             hyperparams,
             overridePrompt,
             overridePayload,
             guardrailLogs,
-            activeGuardrails: config.activeGuardrails
+            activeGuardrails: config.activeGuardrails,
+            userId
         });
 
         if (judgeResult.error) {
@@ -179,7 +181,10 @@ class GuardrailLogic {
                     criteria: { bannedTopics: config.bannedTopics, regexPatterns: null },
                     history: [],
                     customPrompt: config.llmConfig.customPrompt,
-                    activeGuardrails: config.activeGuardrails
+                    customSystemPrompt: config.llmConfig.systemPrompt,
+                    activeGuardrails: config.activeGuardrails,
+                    provider: config.llmConfig.provider,
+                    model: config.llmConfig.model
                 });
             }
             return "No active LLM guardrails selected.";
@@ -195,7 +200,10 @@ class GuardrailLogic {
             },
             history,
             customPrompt: config.llmConfig.customPrompt,
-            activeGuardrails: config.activeGuardrails
+            customSystemPrompt: config.llmConfig.systemPrompt,
+            activeGuardrails: config.activeGuardrails,
+            provider: config.llmConfig.provider,
+            model: config.llmConfig.model
         });
     }
 
@@ -221,6 +229,7 @@ class GuardrailLogic {
             model: config.llmConfig.model,
             history,
             customPrompt: config.llmConfig.customPrompt,
+            customSystemPrompt: config.llmConfig.systemPrompt,
             hyperparams: hyperparams,
             overridePrompt: overridePrompt,
             guardrailLogs,

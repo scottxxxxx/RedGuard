@@ -1,6 +1,7 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser } from '@/contexts/UserContext';
+import { EvaluationResultsView, parseEvaluationOutput } from './EvaluationResultsView';
 
 interface EvaluationRun {
     id: string;
@@ -43,6 +44,43 @@ const PassFailBadge = ({ pass }: { pass: boolean | null | string }) => {
     );
 };
 
+// ── Column Configuration ──────────────────────────────────────────────────
+
+interface ColumnDef {
+    id: string;
+    label: string;
+    minWidth: number;
+    defaultWidth: number;
+    align: 'left' | 'center';
+}
+
+const ALL_COLUMNS: ColumnDef[] = [
+    { id: 'time', label: 'Time', minWidth: 80, defaultWidth: 100, align: 'left' },
+    { id: 'conversation', label: 'Conversation', minWidth: 150, defaultWidth: 280, align: 'left' },
+    { id: 'sessionId', label: 'Bot Session ID', minWidth: 100, defaultWidth: 200, align: 'left' },
+    { id: 'model', label: 'Model', minWidth: 80, defaultWidth: 120, align: 'left' },
+    { id: 'prompt', label: 'Prompt', minWidth: 80, defaultWidth: 140, align: 'left' },
+    { id: 'toxicity', label: 'Toxicity', minWidth: 70, defaultWidth: 90, align: 'center' },
+    { id: 'topics', label: 'Topics', minWidth: 70, defaultWidth: 90, align: 'center' },
+    { id: 'injection', label: 'Injection', minWidth: 70, defaultWidth: 90, align: 'center' },
+    { id: 'regex', label: 'Regex', minWidth: 70, defaultWidth: 90, align: 'center' },
+    { id: 'overall', label: 'Overall', minWidth: 70, defaultWidth: 90, align: 'center' },
+];
+
+interface ColumnConfig {
+    order: string[];
+    visible: string[];
+    widths: Record<string, number>;
+}
+
+const DEFAULT_COLUMN_CONFIG: ColumnConfig = {
+    order: ALL_COLUMNS.map(c => c.id),
+    visible: ALL_COLUMNS.map(c => c.id),
+    widths: Object.fromEntries(ALL_COLUMNS.map(c => [c.id, c.defaultWidth])),
+};
+
+// ── Prompt & Conversation Helpers ─────────────────────────────────────────
+
 // Parse conversation history from prompt to count turns
 const parseConversation = (promptSent: string) => {
     if (!promptSent) return [];
@@ -55,10 +93,11 @@ const parseConversation = (promptSent: string) => {
         if (promptSent.trim().startsWith('{')) {
             const json = JSON.parse(promptSent);
             if (json.messages && Array.isArray(json.messages)) {
-                // OpenAI/Anthropic format
                 searchableText = json.messages.map((m: any) => m.content).join('\n\n');
+            } else if (json.input && Array.isArray(json.input)) {
+                // OpenAI Responses API format
+                searchableText = json.input.map((m: any) => m.content).join('\n\n');
             } else if (json.contents && Array.isArray(json.contents)) {
-                // Gemini format
                 searchableText = json.contents.map((c: any) => c.parts?.[0]?.text || '').join('\n\n');
             }
         }
@@ -66,13 +105,17 @@ const parseConversation = (promptSent: string) => {
         // Not JSON, continue with raw text
     }
 
-    // Strategy 1: Look specifically for the transcript section in v4 prompts
-    const transcriptMatch = searchableText.match(/## Conversation Transcript\s*([^]*?)\s*---/i) ||
-        searchableText.match(/### Conversation Transcript\s*([^]*?)\s*---/i);
+    // Strategy 0.5: If text has === USER PROMPT === header, extract just that section
+    const userPromptSection = searchableText.match(/=== USER PROMPT ===\s*([\s\S]*?)$/i);
+    if (userPromptSection) {
+        searchableText = userPromptSection[1];
+    }
+
+    // Strategy 1: Look for the transcript section — support both --- and ## as delimiters
+    const transcriptMatch = searchableText.match(/##+ Conversation Transcript\s*([\s\S]*?)\s*(?:---|##[^#])/i);
     const textToAnalyze = transcriptMatch ? transcriptMatch[1] : searchableText;
 
     // Strategy 2: Robust Regex for "User: \"text\"" or "Bot: \"text\""
-    // Also handles the "- user:" format from older prompts
     const pattern = /(?:- )?(User|Bot|user|bot):\s*"?([^]*?)(?="?\s*(?:\n(?:- )?(?:User|Bot|user|bot):|\nInput Data:|\n\n|###|##|---|$))/gi;
     let match;
 
@@ -80,8 +123,6 @@ const parseConversation = (promptSent: string) => {
         const roleStr = match[1].toLowerCase();
         const role = roleStr.includes('user') ? 'user' : 'bot';
         let content = match[2].trim();
-
-        // Clean up quotes if present
         content = content.replace(/^"|"$/g, '').trim();
 
         if (content && content !== '{{conversation_transcript}}' && content !== '{{conversation_history}}') {
@@ -130,7 +171,6 @@ const parseConversation = (promptSent: string) => {
 
 // Get last message of a role
 const getLastMessage = (text: string, promptSent: string) => {
-    // If the text looks like it could be a single message (short), just return it
     if (text.length < 100 && !text.includes('\n')) {
         return { text, turnCount: 1 };
     }
@@ -145,72 +185,21 @@ const getLastMessage = (text: string, promptSent: string) => {
     };
 };
 
-// Extract overall assessment from LLM output
-const extractOverallAssessment = (llmOutput: string): { rating: string; comment: string } | null => {
-    if (!llmOutput) return null;
 
-    try {
-        // Clean up the output - remove markdown code blocks if present
-        let cleanOutput = llmOutput.trim();
-
-        // First, try to parse as full API response (Anthropic format with content array)
-        try {
-            const apiResponse = JSON.parse(cleanOutput);
-
-            // Check if it's an Anthropic API response with content array
-            if (apiResponse.content && Array.isArray(apiResponse.content)) {
-                // Extract the text from the first content block
-                cleanOutput = apiResponse.content[0]?.text || cleanOutput;
-            }
-        } catch {
-            // Not a JSON API response, continue with cleanOutput as-is
-        }
-
-        // Remove markdown json code blocks
-        if (cleanOutput.startsWith('```json')) {
-            cleanOutput = cleanOutput.replace(/^```json\s*/, '').replace(/\s*```$/, '');
-        } else if (cleanOutput.startsWith('```')) {
-            cleanOutput = cleanOutput.replace(/^```\s*/, '').replace(/\s*```$/, '');
-        }
-
-        // Try to find JSON if there's text around it
-        const jsonMatch = cleanOutput.match(/\{[\s\S]*\}/);
-        if (jsonMatch) {
-            cleanOutput = jsonMatch[0];
-        }
-
-        const parsed = JSON.parse(cleanOutput);
-
-        // Check for overall_assessment object at top level
-        if (parsed.overall_assessment?.comment) {
-            return {
-                rating: parsed.overall_assessment.rating || 'unknown',
-                comment: parsed.overall_assessment.comment
-            };
-        }
-
-        // Check nested in bot_response_evaluation
-        if (parsed.bot_response_evaluation?.overall_assessment?.comment) {
-            return {
-                rating: parsed.bot_response_evaluation.overall_assessment.rating || 'unknown',
-                comment: parsed.bot_response_evaluation.overall_assessment.comment
-            };
-        }
-
-        // Check nested in guardrail_system_performance
-        if (parsed.guardrail_system_performance?.overall_assessment?.comment) {
-            return {
-                rating: parsed.guardrail_system_performance.overall_assessment.rating || 'unknown',
-                comment: parsed.guardrail_system_performance.overall_assessment.comment
-            };
-        }
-
-    } catch (e) {
-        console.error('[RunHistory] Failed to parse LLM output:', e);
-    }
-
-    return null;
+// Derive prompt template label from model name
+const getPromptLabel = (run: EvaluationRun): string => {
+    const model = (run.model || '').toLowerCase();
+    if (model.startsWith('gpt-5')) return 'GPT 5.x';
+    if (model.startsWith('o3') || model.startsWith('o4')) return 'GPT 5.x';
+    if (model.startsWith('claude')) return 'Opus';
+    if (model.startsWith('gemini')) return 'Gemini';
+    if (model.startsWith('deepseek')) return 'DeepSeek';
+    if (model.startsWith('qwen')) return 'Qwen';
+    if (model.startsWith('kimi')) return 'Kimi';
+    return 'Default';
 };
+
+// ── Component ─────────────────────────────────────────────────────────────
 
 interface RunHistoryProps {
     botId?: string;
@@ -226,6 +215,88 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const [expandedModal, setExpandedModal] = useState<{ type: 'prompt' | 'output', content: string } | null>(null);
     const pageSize = 10;
 
+    // Column configuration
+    const [columnConfig, setColumnConfig] = useState<ColumnConfig>(DEFAULT_COLUMN_CONFIG);
+    const [showColumnSettings, setShowColumnSettings] = useState(false);
+    const [resizing, setResizing] = useState<{ colId: string; startX: number; startWidth: number } | null>(null);
+    const settingsRef = useRef<HTMLDivElement>(null);
+
+    // Load column config from localStorage
+    useEffect(() => {
+        try {
+            const saved = localStorage.getItem('runhistory_columns');
+            if (saved) {
+                const parsed = JSON.parse(saved);
+                // Merge with defaults so new columns are included
+                const allIds = ALL_COLUMNS.map(c => c.id);
+                const savedOrder = (parsed.order || []).filter((id: string) => allIds.includes(id));
+                const newCols = allIds.filter(id => !savedOrder.includes(id));
+                setColumnConfig({
+                    order: [...savedOrder, ...newCols],
+                    visible: parsed.visible?.length ? parsed.visible : DEFAULT_COLUMN_CONFIG.visible,
+                    widths: { ...DEFAULT_COLUMN_CONFIG.widths, ...(parsed.widths || {}) },
+                });
+            }
+        } catch { /* ignore */ }
+    }, []);
+
+    // Persist column config
+    useEffect(() => {
+        localStorage.setItem('runhistory_columns', JSON.stringify(columnConfig));
+    }, [columnConfig]);
+
+    // Column resize mouse handling
+    useEffect(() => {
+        if (!resizing) return;
+        const onMove = (e: MouseEvent) => {
+            const col = ALL_COLUMNS.find(c => c.id === resizing.colId);
+            const minW = col?.minWidth || 50;
+            const newWidth = Math.max(minW, resizing.startWidth + (e.clientX - resizing.startX));
+            setColumnConfig(prev => ({ ...prev, widths: { ...prev.widths, [resizing.colId]: newWidth } }));
+        };
+        const onUp = () => setResizing(null);
+        document.addEventListener('mousemove', onMove);
+        document.addEventListener('mouseup', onUp);
+        return () => { document.removeEventListener('mousemove', onMove); document.removeEventListener('mouseup', onUp); };
+    }, [resizing]);
+
+    // Close column settings on outside click
+    useEffect(() => {
+        if (!showColumnSettings) return;
+        const handler = (e: MouseEvent) => {
+            if (settingsRef.current && !settingsRef.current.contains(e.target as Node)) {
+                setShowColumnSettings(false);
+            }
+        };
+        document.addEventListener('mousedown', handler);
+        return () => document.removeEventListener('mousedown', handler);
+    }, [showColumnSettings]);
+
+    // Column helpers
+    const toggleColumn = (colId: string) => {
+        setColumnConfig(prev => ({
+            ...prev,
+            visible: prev.visible.includes(colId)
+                ? prev.visible.filter(id => id !== colId)
+                : [...prev.visible, colId]
+        }));
+    };
+
+    const moveColumn = (colId: string, direction: 'up' | 'down') => {
+        setColumnConfig(prev => {
+            const order = [...prev.order];
+            const idx = order.indexOf(colId);
+            if (idx < 0) return prev;
+            const newIdx = direction === 'up' ? idx - 1 : idx + 1;
+            if (newIdx < 0 || newIdx >= order.length) return prev;
+            [order[idx], order[newIdx]] = [order[newIdx], order[idx]];
+            return { ...prev, order };
+        });
+    };
+
+    const visibleColumns = columnConfig.order.filter(id => columnConfig.visible.includes(id));
+
+    // Data fetching
     const fetchRuns = async () => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
@@ -234,7 +305,6 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                 const data = await res.json();
                 setRuns(data);
 
-                // Fetch attack messages for all unique session IDs
                 const sessionIds = [...new Set(data.map((run: EvaluationRun) => run.sessionId).filter(Boolean))] as string[];
                 const attackData: { [sessionId: string]: AttackMessage[] } = {};
 
@@ -258,14 +328,10 @@ export default function RunHistory({ botId }: RunHistoryProps) {
         }
     };
 
-    useEffect(() => {
-        fetchRuns();
-    }, []);
+    useEffect(() => { fetchRuns(); }, []);
 
-    // Helper to get conversation turns from a run
     const getRunTurns = (run: EvaluationRun) => {
         let turns = parseConversation(run.promptSent);
-        // Fallback: If prompt didn't yield turns but userInput looks like it has markers
         if (turns.length === 0 && (run.userInput.includes('User:') || run.userInput.includes('Bot:'))) {
             turns = parseConversation(run.userInput);
         }
@@ -287,41 +353,23 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const exportToCSV = async () => {
         if (runs.length === 0) return;
 
-        // Helper to escape CSV values (handle commas, quotes, newlines)
         const escapeCSV = (value: string | boolean | null) => {
             if (value === null) return 'N/A';
             if (typeof value === 'boolean') return value ? 'Pass' : 'Fail';
             let str = String(value);
-
-            // Replace newlines with " | " for better Excel readability
             str = str.replace(/\r\n/g, ' | ').replace(/\n/g, ' | ').replace(/\r/g, ' | ');
-
-            // If contains comma or quote, wrap in quotes and escape internal quotes
             if (str.includes(',') || str.includes('"')) {
                 return `"${str.replace(/"/g, '""')}"`;
             }
             return str;
         };
 
-        // CSV Headers
-        const headers = [
-            'Timestamp',
-            'User Input',
-            'Bot Response',
-            'Toxicity',
-            'Topics',
-            'Injection',
-            'Regex',
-            'Overall',
-            'Prompt Sent',
-            'LLM Output'
-        ];
-
-        // CSV Rows
+        const headers = ['Timestamp', 'User Input', 'Bot Response', 'Model', 'Toxicity', 'Topics', 'Injection', 'Regex', 'Overall', 'Prompt Sent', 'LLM Output'];
         const rows = runs.map(run => [
             new Date(run.createdAt).toLocaleString(),
             escapeCSV(run.userInput),
             escapeCSV(run.botResponse),
+            run.model || '-',
             escapeCSV(run.toxicityPass),
             escapeCSV(run.topicsPass),
             escapeCSV(run.injectionPass),
@@ -331,39 +379,26 @@ export default function RunHistory({ botId }: RunHistoryProps) {
             escapeCSV(run.llmOutput)
         ]);
 
-        // Combine headers and rows
-        const csvContent = [
-            headers.join(','),
-            ...rows.map(row => row.join(','))
-        ].join('\n');
-
-        // Generate default filename: GuardrailEval_Bot######_timestamp.csv
+        const csvContent = [headers.join(','), ...rows.map(row => row.join(','))].join('\n');
         const botIdSuffix = botId ? botId.slice(-6) : '000000';
         const timestamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
         const defaultFilename = `GuardrailEval_Bot${botIdSuffix}_${timestamp}.csv`;
 
-        // Try to use File System Access API for "Save As" dialog
         if ('showSaveFilePicker' in window) {
             try {
                 const handle = await (window as any).showSaveFilePicker({
                     suggestedName: defaultFilename,
-                    types: [{
-                        description: 'CSV file',
-                        accept: { 'text/csv': ['.csv'] }
-                    }]
+                    types: [{ description: 'CSV file', accept: { 'text/csv': ['.csv'] } }]
                 });
                 const writable = await handle.createWritable();
                 await writable.write(csvContent);
                 await writable.close();
                 return;
             } catch (err: any) {
-                // User cancelled or API not supported
                 if (err.name === 'AbortError') return;
-                console.warn('File System Access API failed, falling back to download:', err);
             }
         }
 
-        // Fallback: standard download (for Firefox, Safari, or if API fails)
         const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
         const link = document.createElement('a');
         const url = URL.createObjectURL(blob);
@@ -379,6 +414,80 @@ export default function RunHistory({ botId }: RunHistoryProps) {
         if (text.length <= maxLen) return text;
         return text.substring(0, maxLen) + '...';
     };
+
+    // ── Cell Renderer ─────────────────────────────────────────────────────
+
+    const renderCell = (colId: string, run: EvaluationRun, turns: { role: 'user' | 'bot'; content: string }[], turnCount: number) => {
+        switch (colId) {
+            case 'time':
+                return (
+                    <td key={colId} className="py-2 px-2 text-xs text-[var(--foreground-muted)] whitespace-nowrap overflow-hidden">
+                        {new Date(run.createdAt).toLocaleTimeString()}
+                    </td>
+                );
+            case 'conversation':
+                return (
+                    <td key={colId} className="py-2 px-2 overflow-hidden">
+                        <div className="flex items-center gap-2">
+                            <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700">
+                                {turnCount} {turnCount === 1 ? 'turn' : 'turns'}
+                            </span>
+                            <div className="flex flex-col min-w-0">
+                                <span className={`text-xs truncate ${run.isAttack ? 'text-red-600 font-bold' : 'text-blue-600'}`} title={run.userInput}>
+                                    {run.isAttack && <span className="mr-1">🚨</span>}
+                                    <strong>U:</strong> {truncate(turns.filter(t => t.role === 'user').pop()?.content || run.userInput, 40)}
+                                </span>
+                                <span className="text-xs text-gray-600 truncate" title={run.botResponse}>
+                                    <strong>B:</strong> {truncate(turns.filter(t => t.role === 'bot').pop()?.content || run.botResponse, 40)}
+                                </span>
+                            </div>
+                        </div>
+                    </td>
+                );
+            case 'sessionId':
+                return (
+                    <td key={colId} className="py-2 px-2 text-xs font-mono text-[var(--foreground-muted)] truncate overflow-hidden">
+                        {run.sessionId || '-'}
+                    </td>
+                );
+            case 'model':
+                return (
+                    <td key={colId} className="py-2 px-2 text-xs font-mono text-[var(--foreground-muted)] truncate overflow-hidden">
+                        {run.model || '-'}
+                    </td>
+                );
+            case 'prompt':
+                return (
+                    <td key={colId} className="py-2 px-2 text-xs overflow-hidden">
+                        <span className="px-1.5 py-0.5 rounded text-[10px] font-semibold uppercase tracking-wide bg-[var(--bg-tertiary,#f3f4f6)] text-[var(--foreground-secondary,#4b5563)]">
+                            {getPromptLabel(run)}
+                        </span>
+                    </td>
+                );
+            case 'toxicity':
+                return <td key={colId} className="py-2 px-2 text-center"><PassFailBadge pass={run.toxicityPass} /></td>;
+            case 'topics':
+                return <td key={colId} className="py-2 px-2 text-center"><PassFailBadge pass={run.topicsPass} /></td>;
+            case 'injection':
+                return <td key={colId} className="py-2 px-2 text-center"><PassFailBadge pass={run.injectionPass} /></td>;
+            case 'regex':
+                return <td key={colId} className="py-2 px-2 text-center"><PassFailBadge pass={run.regexPass} /></td>;
+            case 'overall':
+                return (
+                    <td key={colId} className="py-2 px-2 text-center">
+                        {run.overallPass ? (
+                            <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-green-600 text-white">PASS</span>
+                        ) : (
+                            <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-red-600 text-white">FAIL</span>
+                        )}
+                    </td>
+                );
+            default:
+                return <td key={colId} />;
+        }
+    };
+
+    // ── Render ─────────────────────────────────────────────────────────────
 
     if (loading) {
         return (
@@ -414,6 +523,77 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                 </div>
                 {runs.length > 0 && (
                     <div className="flex items-center gap-2">
+                        {/* Column Settings */}
+                        <div className="relative" ref={settingsRef}>
+                            <button
+                                onClick={() => setShowColumnSettings(!showColumnSettings)}
+                                className="text-xs flex items-center gap-1 text-[var(--foreground-muted)] hover:text-[var(--foreground)] font-medium px-2 py-1 rounded hover:bg-[var(--surface-hover)] transition-colors"
+                                title="Configure columns"
+                            >
+                                <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4" />
+                                </svg>
+                                Columns
+                            </button>
+                            {showColumnSettings && (
+                                <div className="absolute right-0 top-full mt-1 z-50 bg-[var(--surface,#fff)] border border-[var(--border)] rounded-lg shadow-lg p-3 w-72">
+                                    <div className="flex items-center justify-between mb-2 pb-2 border-b border-[var(--border)]">
+                                        <span className="text-xs font-semibold text-[var(--foreground)] uppercase tracking-wide">Configure Columns</span>
+                                        <button
+                                            onClick={() => { setColumnConfig(DEFAULT_COLUMN_CONFIG); }}
+                                            className="text-[10px] text-[var(--primary-600)] hover:text-[var(--primary-700)] font-medium"
+                                        >
+                                            Reset
+                                        </button>
+                                    </div>
+                                    <div className="space-y-0.5 max-h-80 overflow-y-auto">
+                                        {columnConfig.order.map((colId, idx) => {
+                                            const col = ALL_COLUMNS.find(c => c.id === colId);
+                                            if (!col) return null;
+                                            const isVisible = columnConfig.visible.includes(colId);
+                                            return (
+                                                <div key={colId} className="flex items-center gap-2 py-1 px-1 rounded hover:bg-[var(--surface-hover)] group">
+                                                    <input
+                                                        type="checkbox"
+                                                        checked={isVisible}
+                                                        onChange={() => toggleColumn(colId)}
+                                                        className="rounded border-gray-300 text-[var(--accent-primary)] focus:ring-[var(--accent-primary)] w-3.5 h-3.5"
+                                                    />
+                                                    <span className={`text-xs flex-1 ${isVisible ? 'text-[var(--foreground)]' : 'text-[var(--foreground-muted)]'}`}>
+                                                        {col.label}
+                                                    </span>
+                                                    <div className="flex items-center gap-0.5 opacity-0 group-hover:opacity-100 transition-opacity">
+                                                        <button
+                                                            onClick={() => moveColumn(colId, 'up')}
+                                                            disabled={idx === 0}
+                                                            className="p-0.5 text-[var(--foreground-muted)] hover:text-[var(--foreground)] disabled:opacity-20"
+                                                            title="Move up"
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 15l7-7 7 7" />
+                                                            </svg>
+                                                        </button>
+                                                        <button
+                                                            onClick={() => moveColumn(colId, 'down')}
+                                                            disabled={idx === columnConfig.order.length - 1}
+                                                            className="p-0.5 text-[var(--foreground-muted)] hover:text-[var(--foreground)] disabled:opacity-20"
+                                                            title="Move down"
+                                                        >
+                                                            <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
+                                                            </svg>
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                    <div className="mt-2 pt-2 border-t border-[var(--border)] text-[10px] text-[var(--foreground-muted)]">
+                                        Drag column borders to resize. Use arrows to reorder.
+                                    </div>
+                                </div>
+                            )}
+                        </div>
                         <button
                             onClick={exportToCSV}
                             className="text-xs flex items-center gap-1 text-green-600 hover:text-green-700 font-medium px-2 py-1 rounded hover:bg-green-50 transition-colors"
@@ -443,17 +623,33 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                 </div>
             ) : (
                 <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
+                    <table className="w-full text-sm" style={{ tableLayout: 'fixed' }}>
                         <thead>
                             <tr className="border-b border-[var(--border)]">
-                                <th className="text-left py-2 px-2 font-medium text-[var(--foreground-muted)]">Time</th>
-                                <th className="text-left py-2 px-2 font-medium text-[var(--foreground-muted)]">Conversation</th>
-                                <th className="text-left py-2 px-2 font-medium text-[var(--foreground-muted)]">Bot Session ID</th>
-                                <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Toxicity</th>
-                                <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Topics</th>
-                                <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Injection</th>
-                                <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Regex</th>
-                                <th className="text-center py-2 px-2 font-medium text-[var(--foreground-muted)]">Overall</th>
+                                {visibleColumns.map(colId => {
+                                    const col = ALL_COLUMNS.find(c => c.id === colId)!;
+                                    return (
+                                        <th
+                                            key={colId}
+                                            className={`${col.align === 'center' ? 'text-center' : 'text-left'} py-2 px-2 font-medium text-[var(--foreground-muted)] relative select-none`}
+                                            style={{ width: columnConfig.widths[colId] || col.defaultWidth }}
+                                        >
+                                            {col.label}
+                                            <div
+                                                className="absolute right-0 top-0 bottom-0 w-1.5 cursor-col-resize hover:bg-[var(--primary-200)] active:bg-[var(--primary-400)] transition-colors"
+                                                onMouseDown={(e) => {
+                                                    e.preventDefault();
+                                                    e.stopPropagation();
+                                                    setResizing({
+                                                        colId,
+                                                        startX: e.clientX,
+                                                        startWidth: columnConfig.widths[colId] || col.defaultWidth
+                                                    });
+                                                }}
+                                            />
+                                        </th>
+                                    );
+                                })}
                             </tr>
                         </thead>
                         <tbody>
@@ -467,124 +663,50 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                             className="border-b border-[var(--border)] hover:bg-[var(--surface-hover)] cursor-pointer transition-colors"
                                             onClick={() => setExpandedRow(expandedRow === run.id ? null : run.id)}
                                         >
-                                            <td className="py-2 px-2 text-xs text-[var(--foreground-muted)] whitespace-nowrap">
-                                                {new Date(run.createdAt).toLocaleTimeString()}
-                                            </td>
-                                            <td className="py-2 px-2 max-w-[300px]">
-                                                <div className="flex items-center gap-2">
-                                                    {turnCount > 1 && (
-                                                        <span className="shrink-0 px-1.5 py-0.5 text-xs font-medium rounded bg-purple-100 text-purple-700">
-                                                            {turnCount} turns
-                                                        </span>
-                                                    )}
-                                                    <div className="flex flex-col min-w-0">
-                                                        <span className={`text-xs truncate ${run.isAttack ? 'text-red-600 font-bold' : 'text-blue-600'}`} title={run.userInput}>
-                                                            {run.isAttack && <span className="mr-1">🚨</span>}
-                                                            <strong>U:</strong> {truncate(turns.filter(t => t.role === 'user').pop()?.content || run.userInput, 40)}
-                                                        </span>
-                                                        <span className="text-xs text-gray-600 truncate" title={run.botResponse}>
-                                                            <strong>B:</strong> {truncate(turns.filter(t => t.role === 'bot').pop()?.content || run.botResponse, 40)}
-                                                        </span>
-                                                    </div>
-                                                </div>
-                                            </td>
-                                            <td className="py-2 px-2 text-xs font-mono text-[var(--foreground-muted)]">
-                                                {run.sessionId || '-'}
-                                            </td>
-                                            <td className="py-2 px-2 text-center"><PassFailBadge pass={run.toxicityPass} /></td>
-                                            <td className="py-2 px-2 text-center"><PassFailBadge pass={run.topicsPass} /></td>
-                                            <td className="py-2 px-2 text-center"><PassFailBadge pass={run.injectionPass} /></td>
-                                            <td className="py-2 px-2 text-center"><PassFailBadge pass={run.regexPass} /></td>
-                                            <td className="py-2 px-2 text-center">
-                                                {run.overallPass ? (
-                                                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-green-600 text-white">PASS</span>
-                                                ) : (
-                                                    <span className="px-2 py-0.5 text-xs font-bold rounded-full bg-red-600 text-white">FAIL</span>
-                                                )}
-                                            </td>
+                                            {visibleColumns.map(colId => renderCell(colId, run, turns, turnCount))}
                                         </tr>
                                         {expandedRow === run.id && (
                                             <tr className="bg-[var(--surface-hover)]">
-                                                <td colSpan={8} className="p-4">
+                                                <td colSpan={visibleColumns.length} className="p-4">
                                                     <div className="space-y-4">
-                                                        {/* Overall Assessment */}
+                                                        {/* Structured Evaluation Results */}
                                                         {(() => {
-                                                            const assessment = extractOverallAssessment(run.llmOutput);
-                                                            if (!assessment) return null;
-
-                                                            // Rating badge styling
-                                                            const getRatingStyle = (rating: string) => {
-                                                                const r = rating.toLowerCase();
-                                                                if (r === 'effective' || r === 'excellent') {
-                                                                    return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
-                                                                }
-                                                                if (r === 'good' || r === 'adequate') {
-                                                                    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
-                                                                }
-                                                                if (r === 'poor' || r === 'ineffective') {
-                                                                    return 'bg-red-100 text-red-800 dark:bg-red-900/30 dark:text-red-300';
-                                                                }
-                                                                if (r === 'warning' || r === 'moderate') {
-                                                                    return 'bg-amber-100 text-amber-800 dark:bg-amber-900/30 dark:text-amber-300';
-                                                                }
-                                                                return 'bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-300';
-                                                            };
-
-                                                            return (
-                                                                <div className="bg-[var(--surface)] border-2 border-[var(--primary-600)] rounded-lg p-4">
-                                                                    <div className="flex items-start gap-3">
-                                                                        <div className="flex-shrink-0 mt-0.5">
-                                                                            <svg className="w-5 h-5 text-[var(--primary-600)]" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                                                            </svg>
-                                                                        </div>
-                                                                        <div className="flex-1 min-w-0">
-                                                                            <div className="flex items-center gap-2 mb-2">
-                                                                                <h4 className="font-semibold text-[var(--foreground)] text-sm">Overall Assessment</h4>
-                                                                                <span className={`px-2 py-0.5 text-xs font-semibold rounded-full uppercase ${getRatingStyle(assessment.rating)}`}>
-                                                                                    {assessment.rating}
-                                                                                </span>
-                                                                            </div>
-                                                                            <p className="text-sm text-[var(--foreground-secondary)] leading-relaxed">{assessment.comment}</p>
-                                                                        </div>
-                                                                    </div>
-                                                                </div>
-                                                            );
+                                                            const parsedData = parseEvaluationOutput(run.llmOutput);
+                                                            if (parsedData) {
+                                                                return (
+                                                                    <EvaluationResultsView
+                                                                        resultData={parsedData}
+                                                                        model={run.model}
+                                                                        totalTokens={run.totalTokens}
+                                                                        inputTokens={run.inputTokens}
+                                                                        outputTokens={run.outputTokens}
+                                                                        latencyMs={run.latencyMs}
+                                                                    />
+                                                                );
+                                                            }
+                                                            return null;
                                                         })()}
 
                                                         {/* Conversation View */}
                                                         <div>
-                                                            <div className="mb-2">
-                                                                <h4 className="font-semibold text-[var(--foreground)] text-sm">
-                                                                    Conversation {turns.length > 0 && `(${Math.ceil(turns.length / 2)} turns)`}
-                                                                </h4>
-                                                            </div>
+                                                            <h4 className="text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground-muted)] mb-2">
+                                                                Conversation {turns.length > 0 && `(${Math.ceil(turns.length / 2)} turns)`}
+                                                            </h4>
                                                             <div className="bg-[var(--background)] rounded-lg border border-[var(--border)] p-4 max-h-96 overflow-y-auto space-y-3 scrollbar-thin scrollbar-thumb-gray-300">
                                                                 {turns.length > 0 ? (
                                                                     (() => {
-                                                                        // Get attack messages for this session
                                                                         const sessionAttacks = run.sessionId ? (attackMessages[run.sessionId] || []) : [];
-
                                                                         return turns.map((turn, idx) => {
-                                                                            // Check if this turn is an attack by matching content
                                                                             const attackInfo = turn.role === 'user'
                                                                                 ? sessionAttacks.find(a => a.messageContent === turn.content)
                                                                                 : null;
                                                                             const isAttackTurn = !!attackInfo;
 
                                                                             return (
-                                                                                <div
-                                                                                    key={idx}
-                                                                                    className={`flex ${turn.role === 'user' ? 'justify-start' : 'justify-end'}`}
-                                                                                >
-                                                                                    <div
-                                                                                        className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${turn.role === 'user'
-                                                                                            ? (isAttackTurn
-                                                                                                ? 'bg-red-600 text-white border border-red-400 font-medium'
-                                                                                                : 'bg-blue-100 text-blue-900')
-                                                                                            : 'bg-gray-100 text-gray-900'
-                                                                                            }`}
-                                                                                    >
+                                                                                <div key={idx} className={`flex ${turn.role === 'user' ? 'justify-start' : 'justify-end'}`}>
+                                                                                    <div className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${turn.role === 'user'
+                                                                                        ? (isAttackTurn ? 'bg-red-600 text-white border border-red-400 font-medium' : 'bg-blue-100 text-blue-900')
+                                                                                        : 'bg-gray-100 text-gray-900'}`}>
                                                                                         <span className={`font-semibold text-[10px] uppercase tracking-wide opacity-60 ${isAttackTurn ? 'text-red-100' : ''}`}>
                                                                                             {turn.role === 'user' ? 'User' : 'Bot'}
                                                                                         </span>
@@ -607,16 +729,10 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                                 ) : (
                                                                     <div className="space-y-2">
                                                                         <div className="flex justify-start">
-                                                                            <div className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${
-                                                                                run.isAttack
-                                                                                    ? 'bg-red-600 text-white border border-red-400 font-medium'
-                                                                                    : 'bg-blue-100 text-blue-900'
-                                                                            }`}>
+                                                                            <div className={`max-w-[80%] px-3 py-2 rounded-lg text-xs ${run.isAttack ? 'bg-red-600 text-white border border-red-400 font-medium' : 'bg-blue-100 text-blue-900'}`}>
                                                                                 <span className={`font-semibold text-[10px] uppercase tracking-wide opacity-60 ${run.isAttack ? 'text-red-100' : ''}`}>User</span>
                                                                                 {run.isAttack && (
-                                                                                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-red-100">
-                                                                                        🚨 Malicious Probe
-                                                                                    </div>
+                                                                                    <div className="text-[9px] font-bold uppercase tracking-wider mb-0.5 text-red-100">🚨 Malicious Probe</div>
                                                                                 )}
                                                                                 <p className="mt-0.5">{run.userInput}</p>
                                                                             </div>
@@ -632,92 +748,44 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                                             </div>
                                                         </div>
 
-                                                        {/* Evaluation Metrics */}
-                                                        {run.totalTokens && (
-                                                            <div>
-                                                                <div className="mb-2">
-                                                                    <h4 className="font-semibold text-[var(--foreground)] text-sm">
-                                                                        Evaluation Metrics {run.model && `(${run.model})`}
-                                                                    </h4>
+                                                        {/* Raw LLM Details (collapsible) */}
+                                                        <details className="text-xs">
+                                                            <summary className="cursor-pointer text-[10px] font-semibold uppercase tracking-wider text-[var(--foreground-muted)] mb-2 select-none">
+                                                                Raw LLM Details
+                                                            </summary>
+                                                            <div className="grid grid-cols-2 gap-4 mt-2">
+                                                                <div>
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <h4 className="font-semibold text-[var(--foreground)]">Prompt Sent to LLM</h4>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); setExpandedModal({ type: 'prompt', content: run.promptSent }); }}
+                                                                            className="text-[var(--primary-600)] hover:text-[var(--primary-700)] p-1"
+                                                                            title="Expand"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                                                            </svg>
+                                                                        </button>
+                                                                    </div>
+                                                                    <pre className="bg-white dark:bg-gray-900 text-green-600 dark:text-green-400 p-2 rounded border border-[var(--border)] max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.promptSent}</pre>
                                                                 </div>
-                                                                <div className="bg-[var(--surface)] border border-[var(--border)] rounded-lg p-3 mb-4">
-                                                                    <div className="grid grid-cols-4 gap-4 text-xs">
-                                                                    <div className="text-center">
-                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Input Tokens</div>
-                                                                        <div className="text-lg font-bold text-green-600 dark:text-green-400">
-                                                                            {run.inputTokens ? run.inputTokens.toLocaleString() : '—'}
-                                                                        </div>
-                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">
-                                                                            {run.inputTokens ? 'Prompt' : 'Not tracked'}
-                                                                        </div>
+                                                                <div>
+                                                                    <div className="flex items-center justify-between mb-1">
+                                                                        <h4 className="font-semibold text-[var(--foreground)]">LLM Output</h4>
+                                                                        <button
+                                                                            onClick={(e) => { e.stopPropagation(); setExpandedModal({ type: 'output', content: run.llmOutput }); }}
+                                                                            className="text-[var(--primary-600)] hover:text-[var(--primary-700)] p-1"
+                                                                            title="Expand"
+                                                                        >
+                                                                            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                                                                            </svg>
+                                                                        </button>
                                                                     </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Output Tokens</div>
-                                                                        <div className="text-lg font-bold text-[var(--primary-600)]">
-                                                                            {run.outputTokens ? run.outputTokens.toLocaleString() : '—'}
-                                                                        </div>
-                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">
-                                                                            {run.outputTokens ? 'Response' : 'Not tracked'}
-                                                                        </div>
-                                                                    </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Total Tokens</div>
-                                                                        <div className="text-lg font-bold text-[var(--foreground)]">{run.totalTokens.toLocaleString()}</div>
-                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">Combined</div>
-                                                                    </div>
-                                                                    <div className="text-center">
-                                                                        <div className="text-[10px] uppercase tracking-wide text-[var(--foreground-muted)] mb-1 font-semibold">Response Time</div>
-                                                                        <div className="text-lg font-bold text-[var(--foreground)]">
-                                                                            {run.latencyMs ? `${(run.latencyMs / 1000).toFixed(2)}s` : '—'}
-                                                                        </div>
-                                                                        <div className="text-[9px] text-[var(--foreground-muted)] mt-0.5">
-                                                                            {run.latencyMs ? 'Latency' : 'Not tracked'}
-                                                                        </div>
-                                                                    </div>
+                                                                    <pre className="bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 p-2 rounded border border-[var(--border)] max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.llmOutput}</pre>
                                                                 </div>
                                                             </div>
-                                                            </div>
-                                                        )}
-
-                                                        {/* LLM Details */}
-                                                        <div className="grid grid-cols-2 gap-4 text-xs">
-                                                            <div>
-                                                                <div className="flex items-center justify-between mb-1">
-                                                                    <h4 className="font-semibold text-[var(--foreground)]">Prompt Sent to LLM</h4>
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setExpandedModal({ type: 'prompt', content: run.promptSent });
-                                                                        }}
-                                                                        className="text-[var(--primary-600)] hover:text-[var(--primary-700)] p-1"
-                                                                        title="Expand"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                                                        </svg>
-                                                                    </button>
-                                                                </div>
-                                                                <pre className="bg-white dark:bg-gray-900 text-green-600 dark:text-green-400 p-2 rounded border border-[var(--border)] max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.promptSent}</pre>
-                                                            </div>
-                                                            <div>
-                                                                <div className="flex items-center justify-between mb-1">
-                                                                    <h4 className="font-semibold text-[var(--foreground)]">LLM Output</h4>
-                                                                    <button
-                                                                        onClick={(e) => {
-                                                                            e.stopPropagation();
-                                                                            setExpandedModal({ type: 'output', content: run.llmOutput });
-                                                                        }}
-                                                                        className="text-[var(--primary-600)] hover:text-[var(--primary-700)] p-1"
-                                                                        title="Expand"
-                                                                    >
-                                                                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
-                                                                        </svg>
-                                                                    </button>
-                                                                </div>
-                                                                <pre className="bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 p-2 rounded border border-[var(--border)] max-h-32 overflow-auto text-xs whitespace-pre-wrap">{run.llmOutput}</pre>
-                                                            </div>
-                                                        </div>
+                                                        </details>
                                                     </div>
                                                 </td>
                                             </tr>
@@ -775,19 +843,10 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                             <h3 className="text-lg font-medium text-[var(--foreground)]">
                                 {expandedModal.type === 'prompt' ? 'Prompt Sent to LLM' : 'LLM Output'}
                             </h3>
-                            <button
-                                onClick={() => setExpandedModal(null)}
-                                className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl"
-                            >
-                                &times;
-                            </button>
+                            <button onClick={() => setExpandedModal(null)} className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl">&times;</button>
                         </div>
                         <div className="flex-1 overflow-auto p-6">
-                            <pre className={`whitespace-pre-wrap text-sm ${
-                                expandedModal.type === 'prompt'
-                                    ? 'text-green-600 dark:text-green-400'
-                                    : 'text-blue-600 dark:text-blue-400'
-                            }`}>
+                            <pre className={`whitespace-pre-wrap text-sm ${expandedModal.type === 'prompt' ? 'text-green-600 dark:text-green-400' : 'text-blue-600 dark:text-blue-400'}`}>
                                 {expandedModal.content}
                             </pre>
                         </div>
