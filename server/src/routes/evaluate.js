@@ -4,6 +4,7 @@ const guardrailService = require('../services/guardrail-logic');
 
 router.post('/', async (req, res) => {
     let { userInput, botResponse, guardrailConfig, history, hyperparams, overridePrompt, overridePayload, guardrailLogs } = req.body;
+    const userId = req.headers['x-user-id'] || req.body.userId || null;
 
     if (overridePayload && typeof overridePayload === 'string') {
         try {
@@ -19,7 +20,7 @@ router.post('/', async (req, res) => {
     }
 
     try {
-        const evaluation = await guardrailService.evaluateResponse(userInput, botResponse, guardrailConfig, history, hyperparams, overridePrompt, overridePayload, guardrailLogs);
+        const evaluation = await guardrailService.evaluateResponse(userInput, botResponse, guardrailConfig, history, hyperparams, overridePrompt, overridePayload, guardrailLogs, userId);
         res.json(evaluation);
     } catch (error) {
         console.error("Evaluation Route Error:", error);
@@ -38,6 +39,7 @@ router.post('/preview', async (req, res) => {
         const result = await guardrailService.getEvaluationPayload(userInput, botResponse, guardrailConfig, history, hyperparams, overridePrompt, guardrailLogs);
         res.json({
             prompt: result.prompt,
+            system_prompt: result.system_prompt || null,
             payload: result.payload
         });
     } catch (error) {

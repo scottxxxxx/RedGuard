@@ -23,6 +23,7 @@ interface Props {
 export default function ChatConsole({ config, botConfig, onInteractionUpdate, messages, setMessages, userId, koreSessionId, onSessionReset, onBotResponse, onKoreSessionUpdate, isAuthenticated, onAuthRequired, isConnecting, isConnected }: Props) {
     const [input, setInput] = useState('');
     const [loading, setLoading] = useState(false);
+    const [resetting, setResetting] = useState(false);
     const [showAttackMenu, setShowAttackMenu] = useState(false);
     const menuRef = useRef<HTMLDivElement>(null);
     const scrollContainerRef = useRef<HTMLDivElement>(null);
@@ -175,10 +176,19 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                 }
 
             } else {
-                setMessages(prev => [...prev, { role: 'bot', text: `Error: ${data.details ? JSON.stringify(data.details) : data.error}`, timestamp: new Date() }]);
+                const errorText = `Error: ${data.details ? JSON.stringify(data.details) : data.error}`;
+                setMessages(prev => [...prev, { role: 'bot', text: errorText, timestamp: new Date() }]);
+                // Still update interaction so evaluation can analyze the error scenario
+                if (onInteractionUpdate) {
+                    onInteractionUpdate(userMsg, errorText);
+                }
             }
         } catch (error) {
-            setMessages(prev => [...prev, { role: 'bot', text: "Network Error: Could not connect to backend.", timestamp: new Date() }]);
+            const errorText = "Network Error: Could not connect to backend.";
+            setMessages(prev => [...prev, { role: 'bot', text: errorText, timestamp: new Date() }]);
+            if (onInteractionUpdate) {
+                onInteractionUpdate(userMsg, errorText);
+            }
         } finally {
             setLoading(false);
         }
@@ -293,18 +303,80 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                         className="input flex-1 text-sm text-[var(--foreground)] disabled:opacity-50 disabled:cursor-not-allowed"
                     />
                     <button
-                        onClick={() => {
-                            if (onSessionReset) {
-                                onSessionReset();
-                            } else {
-                                setMessages([]);
-                            }
+                        onClick={async () => {
+                            if (!isConnected || !botConfig || resetting) return;
+                            setResetting(true);
                             setInput('');
+                            setMessages([]);
+
+                            try {
+                                // Start a fresh session with the bot
+                                const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
+                                const res = await fetch(apiUrl, {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({
+                                        botConfig,
+                                        userId: userId || `RedGuard-reset-${Math.random().toString(36).substring(7)}`
+                                    })
+                                });
+
+                                if (res.ok) {
+                                    const data = await res.json();
+                                    // Update session ID
+                                    const newSessionId = data._metadata?.sessionId || data.sessionId;
+                                    if (newSessionId && onKoreSessionUpdate) {
+                                        onKoreSessionUpdate(newSessionId);
+                                    }
+
+                                    // Try to get welcome message
+                                    let greeting = data.data?.[0]?.val;
+
+                                    // If no greeting from connect, send "Hi" to trigger one
+                                    if (!greeting) {
+                                        try {
+                                            const hiRes = await fetch(`${apiUrl.replace('/connect', '/send')}`, {
+                                                method: 'POST',
+                                                headers: { 'Content-Type': 'application/json' },
+                                                body: JSON.stringify({
+                                                    message: 'Hi',
+                                                    userId: userId || `RedGuard-reset-${Math.random().toString(36).substring(7)}`,
+                                                    botConfig
+                                                })
+                                            });
+                                            if (hiRes.ok) {
+                                                const hiData = await hiRes.json();
+                                                if (hiData.data && Array.isArray(hiData.data) && hiData.data.length > 0) {
+                                                    greeting = hiData.data
+                                                        .map((msg: any) => msg.val || msg.text || JSON.stringify(msg))
+                                                        .join('\n');
+                                                }
+                                            }
+                                        } catch {
+                                            // Ignore greeting fetch errors
+                                        }
+                                    }
+
+                                    setMessages([{
+                                        role: 'bot',
+                                        text: greeting || 'New session started. You can start chatting now.',
+                                        timestamp: new Date()
+                                    }]);
+                                } else {
+                                    showToast('Failed to start new session. Please try reconnecting.', 'error');
+                                }
+                            } catch (err) {
+                                console.error('[ChatConsole] Reset error:', err);
+                                showToast('Failed to reset conversation.', 'error');
+                            } finally {
+                                setResetting(false);
+                            }
                         }}
+                        disabled={!isConnected || resetting}
                         title="Reset Conversation"
-                        className="px-3 py-2 text-sm flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--foreground-muted)] hover:text-[var(--error)] transition-colors"
+                        className="px-3 py-2 text-sm flex items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] hover:bg-[var(--surface-hover)] text-[var(--foreground-muted)] hover:text-[var(--error)] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className={`w-4 h-4 ${resetting ? 'animate-spin' : ''}`} fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
                         </svg>
                     </button>

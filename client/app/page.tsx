@@ -43,14 +43,16 @@ function HomeContent() {
 
     // Evaluation State
     const [previewPrompt, setPreviewPrompt] = useState<string | null>(null);
+    const [previewSystemPrompt, setPreviewSystemPrompt] = useState<string | null>(null);
     const [previewPayload, setPreviewPayload] = useState<any | null>(null);
     const [evalResult, setEvalResult] = useState<any | null>(null);
     const [evalRawResponse, setEvalRawResponse] = useState<string | null>(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
     const [runHistoryKey, setRunHistoryKey] = useState(0); // Force refresh of run history
-    const [hyperparams, setHyperparams] = useState({ temperature: 0.0, max_tokens: 4096, top_p: 1.0 });
+    const [hyperparams, setHyperparams] = useState<Record<string, any>>({ temperature: 0.0, max_tokens: 4096, top_p: 1.0 });
     const [koreSessionId, setKoreSessionId] = useState<string | null>(null);  // Kore's internal session ID
     const llmInspectorRef = useRef<LLMInspectorRef>(null);
+    const [logVersion, setLogVersion] = useState(0); // Bumped when GenAI logs are fetched
     const { showToast } = useNotification();
     const [showRequirementsModal, setShowRequirementsModal] = useState(false);
     const [missingRequirements, setMissingRequirements] = useState<string[]>([]);
@@ -76,13 +78,40 @@ function HomeContent() {
         action();
     }, [isAuthenticated]);
 
-    // Auto-refresh Kore GenAI Logs after bot response (5 second delay)
-    // Only works if Inspector is mounted
+    // GenAI log fetch: on bot response OR 10s after last user message (whichever first)
+    const logFetchTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+    const prevMessagesLenRef = useRef(0);
+
     const handleBotResponse = useCallback(() => {
+        // Cancel the 10-second fallback timer — bot responded first
+        if (logFetchTimeoutRef.current) {
+            clearTimeout(logFetchTimeoutRef.current);
+            logFetchTimeoutRef.current = null;
+        }
+        // Fetch logs after 5 seconds (gives Kore time to persist the log entries)
         setTimeout(() => {
             llmInspectorRef.current?.refreshLogs();
         }, 5000);
     }, []);
+
+    // Start a 10-second fallback timer when user sends a message
+    useEffect(() => {
+        if (messages.length > prevMessagesLenRef.current) {
+            const lastMsg = messages[messages.length - 1];
+            if (lastMsg.role === 'user') {
+                // Clear any existing timer
+                if (logFetchTimeoutRef.current) {
+                    clearTimeout(logFetchTimeoutRef.current);
+                }
+                // Fallback: fetch logs 10s after user message if bot hasn't responded yet
+                logFetchTimeoutRef.current = setTimeout(() => {
+                    llmInspectorRef.current?.refreshLogs();
+                    logFetchTimeoutRef.current = null;
+                }, 10000);
+            }
+        }
+        prevMessagesLenRef.current = messages.length;
+    }, [messages]);
 
     const handleBotConnect = (greeting: string) => {
         // Mark as connected
@@ -152,12 +181,16 @@ function HomeContent() {
                         botResponse,
                         guardrailConfig: fullGuardrailConfig,
                         history: messages.filter(m => m.role !== 'evaluation'),
+                        hyperparams,
                         guardrailLogs: llmInspectorRef.current?.getLogs() || []
                     })
                 });
                 const data = await res.json();
                 if (data.prompt !== undefined) {
                     setPreviewPrompt(data.prompt);
+                }
+                if (data.system_prompt !== undefined) {
+                    setPreviewSystemPrompt(data.system_prompt);
                 }
                 if (data.payload !== undefined) {
                     setPreviewPayload(data.payload);
@@ -168,7 +201,7 @@ function HomeContent() {
         };
 
         fetchPreview();
-    }, [interaction, fullGuardrailConfig, messages, llmConfig?.customPrompt]);
+    }, [interaction, fullGuardrailConfig, messages, llmConfig?.customPrompt, llmConfig?.systemPrompt, logVersion]);
 
     // Clear stale evaluation results only when the base interaction content changes
     // We remove fullGuardrailConfig from dependencies so results stay visible 
@@ -232,16 +265,26 @@ function HomeContent() {
     };
 
     const handleEvaluate = async () => {
-        if (!interaction || !fullGuardrailConfig) return;
+        // Use explicit interaction, or derive from messages as fallback
+        let evalInteraction = interaction;
+        if (!evalInteraction && messages.length >= 2) {
+            const lastUserMsg = [...messages].reverse().find(m => m.role === 'user');
+            const lastBotMsg = [...messages].reverse().find(m => m.role === 'bot');
+            if (lastUserMsg && lastBotMsg) {
+                evalInteraction = { user: lastUserMsg.text, bot: lastBotMsg.text };
+                setInteraction(evalInteraction);
+            }
+        }
+        if (!evalInteraction || !fullGuardrailConfig) return;
         setIsEvaluating(true);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
             const res = await fetch(`${apiUrl}/evaluate`, {
                 method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
+                headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
                 body: JSON.stringify({
-                    userInput: interaction.user,
-                    botResponse: interaction.bot,
+                    userInput: evalInteraction.user,
+                    botResponse: evalInteraction.bot,
                     guardrailConfig: fullGuardrailConfig,
                     history: messages.filter(m => m.role !== 'evaluation'),
                     hyperparams,
@@ -253,12 +296,18 @@ function HomeContent() {
             const result = await res.json();
 
             setEvalResult(result);
-            if (interaction) {
-                setInteraction({ ...interaction, result });
+            if (evalInteraction) {
+                setInteraction({ ...evalInteraction, result });
             }
             if (result.debug) {
                 setEvalRawResponse(result.debug.response);
                 setPreviewPrompt(result.debug.prompt);
+            }
+
+            // Skip saving to history if the evaluation LLM call itself failed
+            // (e.g. rate limit, auth error, network error) — these are not real evaluation results
+            if (result.error) {
+                return;
             }
 
             // Save run to database
@@ -280,7 +329,7 @@ function HomeContent() {
                 };
 
                 const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-                const currentMsg = messages.findLast(m => m.role === 'user' && m.text === interaction.user);
+                const currentMsg = messages.findLast(m => m.role === 'user' && m.text === evalInteraction.user);
 
                 // Extract token usage from full API response
                 let inputTokens = null;
@@ -310,8 +359,8 @@ function HomeContent() {
                     body: JSON.stringify({
                         userId,
                         sessionId: koreSessionId || null,
-                        userInput: interaction.user,
-                        botResponse: interaction.bot,
+                        userInput: evalInteraction.user,
+                        botResponse: evalInteraction.bot,
                         promptSent: result.debug?.requestPayload || result.debug?.prompt || previewPrompt || '',
                         llmOutput: result.debug?.fullResponse || result.debug?.response || '',
                         toxicityPass: findResult('toxicity'),
@@ -339,24 +388,23 @@ function HomeContent() {
         }
     };
 
-    const handleRequestPayloadRegen = async (prompt: string): Promise<string> => {
-        if (!interaction) {
-            throw new Error("Please send a message in the Live Verification Console first to create a chat interaction.");
-        }
+    const handleRequestPayloadRegen = async (prompt: string, overrideHyperparams?: Record<string, any>): Promise<string> => {
         if (!fullGuardrailConfig) {
             throw new Error("Please configure guardrail settings before regenerating the payload.");
         }
+        const userInput = interaction?.user || "{{user_input}}";
+        const botResponse = interaction?.bot || "{{bot_response}}";
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         const res = await fetch(`${apiUrl}/evaluate/preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                userInput: interaction.user,
-                botResponse: interaction.bot,
+                userInput,
+                botResponse,
                 guardrailConfig: fullGuardrailConfig,
                 history: messages.filter(m => m.role !== 'evaluation'),
                 overridePrompt: prompt,
-                hyperparams,
+                hyperparams: overrideHyperparams || hyperparams,
                 guardrailLogs: llmInspectorRef.current?.getLogs() || []
             })
         });
@@ -378,7 +426,7 @@ function HomeContent() {
                                 className="h-16 w-auto object-contain"
                             />
                             <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.5</span>
+                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.6</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <AuthButton />
@@ -589,7 +637,7 @@ function HomeContent() {
                                             />
                                         </div>
                                         <div className="col-span-8 h-full min-h-0">
-                                            <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} />
+                                            <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} onLogsUpdated={() => setLogVersion(v => v + 1)} />
                                         </div>
                                     </div>
                                 </div>
@@ -602,20 +650,25 @@ function HomeContent() {
                                     </div>
                                     <div className="grid grid-cols-12 gap-6">
                                         <div className="col-span-4">
-                                            <EvaluationSettings onConfigChange={setLlmConfig} />
+                                            <EvaluationSettings
+                                                onConfigChange={setLlmConfig}
+                                                onPromptTemplateChange={() => {
+                                                    setEvalResult(null);
+                                                    setEvalRawResponse(null);
+                                                    setPreviewPayload(null);
+                                                    setPreviewSystemPrompt(null);
+                                                }}
+                                            />
                                         </div>
                                         <div className="col-span-8">
                                             <EvaluationInspector
                                                 provider={llmConfig?.provider}
-                                                prompt={previewPrompt}
+                                                model={llmConfig?.model}
                                                 rawResponse={evalRawResponse}
                                                 result={evalResult}
                                                 previewPayload={previewPayload}
                                                 hyperparams={hyperparams}
                                                 onHyperparamsChange={setHyperparams}
-                                                onPromptChange={setPreviewPrompt}
-                                                onRequestPayloadRegen={handleRequestPayloadRegen}
-                                                onPayloadChange={setPreviewPayload}
                                             />
                                         </div>
                                     </div>

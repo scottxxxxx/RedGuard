@@ -1,5 +1,50 @@
 # RedGuard Changelog
 
+---
+
+## [0.3.6] - 2026-02-13
+
+### Major Evaluation Engine Upgrade
+
+#### Added
+- **Model-Specific Default Evaluation Prompts**
+  - Automatic loading of optimized templates for model families (GPT-5.x, GPT-5.x Flash, Opus)
+  - Auto-fallback to universal template if no specific match found
+  - Preservation of custom user templates during model switching
+- **GPT-5.x Structured Output Support**
+  - Dedicated templates using strict JSON Schema enforcement via `text.format`
+  - Concise prompt structure with dynamic data sections
+  - "Flash" variant optimized for speed and token efficiency
+- **Structured Evaluation Results UI**
+  - New 2x2 grid view for Guardrail Results (Toxicity, Topics, Injection, Regex)
+  - Rich status badges, reason text, and summary statistics
+  - Consistent visualization across "Evaluation Results" tab and expanded "Evaluation History" rows
+- **Enhanced Evaluation History**
+  - Full structured data view in expanded rows
+  - New columns: Model, Prompt Template Name, Turns Badge
+  - Column configuration (visibility, reorder, resize) persisted in local storage
+- **Model-Aware Hyperparameters**
+  - Per-model parameter definitions in `model-hyperparams.ts`
+  - Auto-reset to defaults when switching providers
+
+#### Changed
+- **Template System Architecture**
+  - Split templates into `system_prompt` (static framework) and `prompt_text` (dynamic data)
+  - `system_prompt` cached by Anthropic; used as `system`/`systemInstruction` for other providers
+- **Evaluation Inspector**
+  - Simplified to 3 read-only tabs (Raw Request, Results, Raw Response)
+  - Removed redundant editor/sync logic
+- **API Updates**
+  - `GET /api/prompts/default` accepts `?provider=&model=` queries
+  - `GET /api/prompts/defaults` lists all available templates
+
+#### Fixed
+- OpenAI Responses API payload structure (`text.format` flattening)
+- Conversation parsing for GPT-5.x (merged turns bug)
+- Tab auto-switching race condition during prompt edits
+
+---
+
 ## [0.3.3] - 2026-02-11
 
 ### Authentication & Authorization Improvements

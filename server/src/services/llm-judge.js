@@ -19,7 +19,7 @@ class LLMJudge {
 
         // Try structured data first
         let tokens = null;
-        if (provider === 'openai') {
+        if (provider === 'openai' || provider === 'deepseek' || provider === 'qwen' || provider === 'kimi') {
             tokens = response.usage?.total_tokens;
         } else if (provider === 'anthropic') {
             tokens = (response.usage?.input_tokens || 0) + (response.usage?.output_tokens || 0);
@@ -49,19 +49,21 @@ class LLMJudge {
      * @param {object[]} params.guardrailLogs
      * @param {string[]} params.activeGuardrails
      */
-    async constructPrompt({ userInput, botResponse, guardrails, criteria, history = [], customPrompt, guardrailLogs = [], activeGuardrails = [] }) {
+    async constructPrompt({ userInput, botResponse, guardrails, criteria, history = [], customPrompt, customSystemPrompt, guardrailLogs = [], activeGuardrails = [], provider = null, model = null }) {
         // Prepare data for substitution
         const bannedTopicsStr = criteria.bannedTopics || 'None';
         const regexPatternsStr = criteria.regexPatterns ? criteria.regexPatterns.join(', ') : 'None';
         const activeGuardrailsStr = guardrails.join(', ');
 
-        // Choose template: Custom or Default
+        // Always load model-specific template for system_prompt/response_format
+        const modelTemplate = await promptService.getDefaultPrompt(provider, model);
+
+        // Choose prompt text: Custom or from model template
         let promptTemplate = "";
         if (customPrompt && customPrompt.trim() !== "") {
             promptTemplate = customPrompt;
         } else {
-            const defaultPromptObj = await promptService.getDefaultPrompt();
-            promptTemplate = defaultPromptObj.prompt_text;
+            promptTemplate = modelTemplate.prompt_text;
         }
 
         // Initial placeholder substitution
@@ -243,7 +245,21 @@ class LLMJudge {
         prompt = prompt.replace(/{{\s*guardrail_response\s*}}/g, inputGuardrailLogs[0] ? getLogJSON(inputGuardrailLogs[0], 'res') : "N/A");
         prompt = prompt.replace(/{{\s*guardrail_outcome\s*}}/g, inputGuardrailLogs[0]?.Outcome || "N/A");
 
-        return prompt;
+        // system_prompt priority:
+        // - customSystemPrompt === null → explicitly disabled, no system prompt (no fallback)
+        // - customSystemPrompt is a non-empty string → use it
+        // - customSystemPrompt is undefined/empty → fall back to model template default
+        const resolvedSystemPrompt = customSystemPrompt === null
+            ? null
+            : (customSystemPrompt && customSystemPrompt.trim() !== "")
+                ? customSystemPrompt
+                : (modelTemplate.system_prompt || null);
+
+        return {
+            prompt_text: prompt,
+            system_prompt: resolvedSystemPrompt,
+            response_format: modelTemplate.response_format || null
+        };
     }
 
     /**
@@ -257,14 +273,26 @@ class LLMJudge {
      * @param {string} params.model // e.g. 'gpt-4o', 'claude-3-5-sonnet'
      * @param {object} params.hyperparams // { temperature, max_tokens, top_p }
      */
-    async evaluate({ userInput, botResponse, guardrails, criteria, apiKey, provider = 'anthropic', model, history = [], customPrompt, hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], activeGuardrails = [] }) {
+    async evaluate({ userInput, botResponse, guardrails, criteria, apiKey, provider = 'anthropic', model, history = [], customPrompt, customSystemPrompt, hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], activeGuardrails = [], userId = null }) {
         if (!apiKey) {
             return { error: `Missing API Key for ${provider}` };
         }
 
         // Merge with defaults
         const params = { ...LLMJudge.DEFAULT_PARAMS, ...hyperparams };
-        let systemPrompt = overridePrompt || await this.constructPrompt({ userInput, botResponse, guardrails, criteria, history, customPrompt, guardrailLogs, activeGuardrails });
+
+        // Construct prompt — returns { prompt_text, system_prompt, response_format }
+        // Always call constructPrompt to resolve system_prompt and response_format from the model template.
+        // When overridePrompt is provided, only the prompt_text is overridden — template metadata is preserved.
+        const fullPromptResult = await this.constructPrompt({ userInput, botResponse, guardrails, criteria, history, customPrompt, customSystemPrompt, guardrailLogs, activeGuardrails, provider, model });
+        const promptResult = overridePrompt
+            ? { ...fullPromptResult, prompt_text: overridePrompt }
+            : fullPromptResult;
+        let userPrompt = promptResult.prompt_text;
+        const templateSystemPrompt = promptResult.system_prompt;
+        const templateResponseFormat = promptResult.response_format;
+        // Keep systemPrompt variable for backward compat with overridePayload extraction below
+        let systemPrompt = userPrompt;
 
         // Update display params and prompt from overridePayload if provided
         if (overridePayload) {
@@ -273,6 +301,9 @@ class LLMJudge {
                     if (overridePayload.generationConfig.temperature !== undefined) params.temperature = overridePayload.generationConfig.temperature;
                     if (overridePayload.generationConfig.maxOutputTokens !== undefined) params.max_tokens = overridePayload.generationConfig.maxOutputTokens;
                     if (overridePayload.generationConfig.topP !== undefined) params.top_p = overridePayload.generationConfig.topP;
+                    if (overridePayload.generationConfig.topK !== undefined) params.top_k = overridePayload.generationConfig.topK;
+                    if (overridePayload.generationConfig.presencePenalty !== undefined) params.presence_penalty = overridePayload.generationConfig.presencePenalty;
+                    if (overridePayload.generationConfig.frequencyPenalty !== undefined) params.frequency_penalty = overridePayload.generationConfig.frequencyPenalty;
                 }
                 if (overridePayload.contents?.[0]?.parts?.[0]?.text) {
                     // Gemini prompt often formatted with suffix, extracting raw might be messy but better than stale
@@ -283,9 +314,16 @@ class LLMJudge {
                 if (overridePayload.temperature !== undefined) params.temperature = overridePayload.temperature;
                 if (overridePayload.max_tokens !== undefined) params.max_tokens = overridePayload.max_tokens;
                 if (overridePayload.top_p !== undefined) params.top_p = overridePayload.top_p;
+                if (overridePayload.max_output_tokens !== undefined) params.max_tokens = overridePayload.max_output_tokens;
+                if (overridePayload.reasoning?.effort) params.reasoning_effort = overridePayload.reasoning.effort;
+                if (overridePayload.frequency_penalty !== undefined) params.frequency_penalty = overridePayload.frequency_penalty;
+                if (overridePayload.presence_penalty !== undefined) params.presence_penalty = overridePayload.presence_penalty;
+                if (overridePayload.seed !== undefined) params.seed = overridePayload.seed;
 
-                if (provider === 'openai' && overridePayload.messages) {
-                    const userMsg = overridePayload.messages.find(m => m.role === 'user');
+                // Handle both Responses API (input) and Chat Completions (messages) formats
+                const msgArray = overridePayload.input || overridePayload.messages;
+                if ((provider === 'openai' || provider === 'deepseek' || provider === 'qwen' || provider === 'kimi') && msgArray) {
+                    const userMsg = msgArray.find(m => m.role === 'user');
                     if (userMsg) systemPrompt = userMsg.content;
                 } else if (provider === 'anthropic' && overridePayload.messages) {
                     systemPrompt = overridePayload.messages[0]?.content || systemPrompt;
@@ -294,37 +332,67 @@ class LLMJudge {
         }
 
         // Build full prompt display with hyperparameters
-        const fullPromptForInspector = `=== LLM REQUEST ===
-Provider: ${provider}
-Model: ${model || 'default'}
-Temperature: ${params.temperature}
-Max Tokens: ${params.max_tokens}
-Top P: ${params.top_p}
-
-=== SYSTEM PROMPT ===
-${systemPrompt}`;
+        let displayLines = [
+            `=== LLM REQUEST ===`,
+            `Provider: ${provider}`,
+            `Model: ${model || 'default'}`
+        ];
+        if (params.reasoning_effort) displayLines.push(`Reasoning Effort: ${params.reasoning_effort}`);
+        if (params.temperature !== undefined) displayLines.push(`Temperature: ${params.temperature}`);
+        displayLines.push(`Max Tokens: ${params.max_tokens}`);
+        if (params.top_p !== undefined) displayLines.push(`Top P: ${params.top_p}`);
+        if (params.top_k) displayLines.push(`Top K: ${params.top_k}`);
+        if (params.frequency_penalty) displayLines.push(`Frequency Penalty: ${params.frequency_penalty}`);
+        if (params.presence_penalty) displayLines.push(`Presence Penalty: ${params.presence_penalty}`);
+        if (params.seed !== undefined && params.seed !== null) displayLines.push(`Seed: ${params.seed}`);
+        if (templateSystemPrompt) {
+            displayLines.push('', '=== SYSTEM MESSAGE ===', templateSystemPrompt);
+        }
+        displayLines.push('', '=== USER PROMPT ===', systemPrompt);
+        const fullPromptForInspector = displayLines.join('\n');
 
         const startTime = Date.now();
 
         try {
             let result;
-            const actualModel = model || (provider === 'openai' ? 'gpt-4o' : provider === 'anthropic' ? 'claude-sonnet-4-5-20250929' : 'gemini-2.5-pro-preview-06-05');
+            const defaultModels = {
+                openai: 'gpt-5.2',
+                anthropic: 'claude-sonnet-4-5-20250929',
+                gemini: 'gemini-2.5-pro',
+                deepseek: 'deepseek-chat',
+                qwen: 'qwen3-max',
+                kimi: 'kimi-k2.5'
+            };
+            const actualModel = model || defaultModels[provider] || 'gpt-4.1';
+
+            // Build template options for payload constructors
+            const templateOpts = {
+                systemPrompt: templateSystemPrompt || null,
+                responseFormat: templateResponseFormat || null
+            };
 
             if (provider === 'openai') {
-                result = await this._callOpenAI(apiKey, actualModel, systemPrompt, params, overridePayload);
+                result = await this._callOpenAI(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
             } else if (provider === 'anthropic') {
-                result = await this._callAnthropic(apiKey, actualModel, systemPrompt, params, overridePayload);
+                result = await this._callAnthropic(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
             } else if (provider === 'gemini') {
-                result = await this._callGemini(apiKey, actualModel, systemPrompt, params, overridePayload);
+                result = await this._callGemini(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
+            } else if (provider === 'deepseek') {
+                result = await this._callDeepSeek(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
+            } else if (provider === 'qwen') {
+                result = await this._callQwen(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
+            } else if (provider === 'kimi') {
+                result = await this._callKimi(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
             } else {
                 return { error: `Unknown provider: ${provider}` };
             }
 
             // Log successful LLM call
             await apiLogger.log({
+                userId,
                 logType: 'llm_evaluate',
                 method: 'POST',
-                endpoint: provider === 'openai' ? 'api.openai.com' : provider === 'anthropic' ? 'api.anthropic.com' : 'generativelanguage.googleapis.com',
+                endpoint: { openai: 'api.openai.com', anthropic: 'api.anthropic.com', gemini: 'generativelanguage.googleapis.com', deepseek: 'api.deepseek.com', qwen: 'dashscope-intl.aliyuncs.com', kimi: 'api.moonshot.ai' }[provider] || provider,
                 requestBody: { prompt: systemPrompt.substring(0, 500), params },
                 statusCode: 200,
                 responseBody: result.parsed,
@@ -373,9 +441,10 @@ ${systemPrompt}`;
 
             // Log error
             await apiLogger.log({
+                userId,
                 logType: 'llm_evaluate',
                 method: 'POST',
-                endpoint: provider === 'openai' ? 'api.openai.com' : provider === 'anthropic' ? 'api.anthropic.com' : 'generativelanguage.googleapis.com',
+                endpoint: { openai: 'api.openai.com', anthropic: 'api.anthropic.com', gemini: 'generativelanguage.googleapis.com', deepseek: 'api.deepseek.com', qwen: 'dashscope-intl.aliyuncs.com', kimi: 'api.moonshot.ai' }[provider] || provider,
                 requestBody: { prompt: systemPrompt.substring(0, 500), params },
                 statusCode: error.response?.status || 500,
                 responseBody: rawErrorObj,
@@ -396,52 +465,142 @@ ${systemPrompt}`;
         }
     }
 
-    async getPayload({ userInput, botResponse, guardrails, criteria, provider = 'anthropic', model, history = [], customPrompt, hyperparams = {}, overridePrompt = null, guardrailLogs = [], activeGuardrails = [] }) {
+    async getPayload({ userInput, botResponse, guardrails, criteria, provider = 'anthropic', model, history = [], customPrompt, customSystemPrompt, hyperparams = {}, overridePrompt = null, guardrailLogs = [], activeGuardrails = [] }) {
         const params = { ...LLMJudge.DEFAULT_PARAMS, ...hyperparams };
-        const systemPrompt = overridePrompt || await this.constructPrompt({ userInput, botResponse, guardrails, criteria, history, customPrompt, guardrailLogs, activeGuardrails });
-        const actualModel = model || (provider === 'openai' ? 'gpt-4o' : provider === 'anthropic' ? 'claude-sonnet-4-5-20250929' : 'gemini-2.5-pro-preview-06-05');
+
+        // Always call constructPrompt to resolve system_prompt and response_format from the model template.
+        // When overridePrompt is provided, only the prompt_text is overridden — template metadata is preserved.
+        const fullPromptResult = await this.constructPrompt({ userInput, botResponse, guardrails, criteria, history, customPrompt, customSystemPrompt, guardrailLogs, activeGuardrails, provider, model });
+        const promptResult = overridePrompt
+            ? { ...fullPromptResult, prompt_text: overridePrompt }
+            : fullPromptResult;
+        const userPrompt = promptResult.prompt_text;
+        const templateOpts = {
+            systemPrompt: promptResult.system_prompt || null,
+            responseFormat: promptResult.response_format || null
+        };
+
+        const defaultModels = {
+            openai: 'gpt-4.1',
+            anthropic: 'claude-sonnet-4-5-20250929',
+            gemini: 'gemini-2.5-pro',
+            deepseek: 'deepseek-chat',
+            qwen: 'qwen3-max',
+            kimi: 'kimi-k2.5'
+        };
+        const actualModel = model || defaultModels[provider] || 'gpt-4.1';
 
         let payload;
         if (provider === 'openai') {
-            payload = this._constructPayloadOpenAI(actualModel, systemPrompt, params);
+            payload = this._constructPayloadOpenAI(actualModel, userPrompt, params, templateOpts);
         } else if (provider === 'anthropic') {
-            payload = this._constructPayloadAnthropic(actualModel, systemPrompt, params);
+            payload = this._constructPayloadAnthropic(actualModel, userPrompt, params, templateOpts);
         } else if (provider === 'gemini') {
-            payload = this._constructPayloadGemini(actualModel, systemPrompt, params);
+            payload = this._constructPayloadGemini(actualModel, userPrompt, params, templateOpts);
+        } else if (provider === 'deepseek' || provider === 'qwen' || provider === 'kimi') {
+            payload = this._constructPayloadOpenAI(actualModel, userPrompt, params, templateOpts);
         } else {
             return { error: `Unknown provider: ${provider}` };
         }
 
         return {
             payload,
-            prompt: systemPrompt, // Show clean substituted text
+            prompt: userPrompt,
+            system_prompt: promptResult.system_prompt || null,
             provider,
             model: actualModel
         };
     }
 
-    _constructPayloadOpenAI(model, prompt, params) {
-        return {
-            model: model,
-            messages: [
-                { role: "system", content: "You are a helpful assistant that outputs JSON." },
+    _constructPayloadOpenAI(model, prompt, params, { systemPrompt = null, responseFormat = null } = {}) {
+        const isOSeries = model.startsWith('o3') || model.startsWith('o4');
+        const isGPT5 = model.startsWith('gpt-5');
+        const useResponsesAPI = isGPT5 || isOSeries;
+
+        // Build payload with hyperparams first, messages/input last (for readability in Raw Request preview)
+        const payload = { model: model };
+
+        // Reasoning effort (GPT-5.x and o-series — Responses API only)
+        if (useResponsesAPI && params.reasoning_effort) {
+            payload.reasoning = { effort: params.reasoning_effort };
+        }
+
+        // Temperature & Top P: not for o-series, not for GPT-5.x with reasoning enabled
+        if (!isOSeries && !(isGPT5 && params.reasoning_effort && params.reasoning_effort !== 'none')) {
+            if (params.temperature !== undefined) payload.temperature = params.temperature;
+            if (params.top_p !== undefined) payload.top_p = params.top_p;
+        }
+
+        // Max tokens key: max_output_tokens for Responses API, max_tokens for Chat Completions
+        if (useResponsesAPI) {
+            payload.max_output_tokens = params.max_tokens;
+        } else {
+            payload.max_tokens = params.max_tokens;
+        }
+
+        // Seed for reproducibility (Chat Completions only)
+        if (!useResponsesAPI && params.seed !== undefined && params.seed !== null) {
+            payload.seed = params.seed;
+        }
+
+        // Penalty params (Chat Completions only — GPT-4.1, DeepSeek/Qwen/Kimi)
+        if (!useResponsesAPI) {
+            if (params.frequency_penalty !== undefined && params.frequency_penalty !== 0) {
+                payload.frequency_penalty = params.frequency_penalty;
+            }
+            if (params.presence_penalty !== undefined && params.presence_penalty !== 0) {
+                payload.presence_penalty = params.presence_penalty;
+            }
+        }
+
+        // Truncation (Responses API only — disable to avoid silent truncation)
+        if (useResponsesAPI) {
+            payload.truncation = "disabled";
+        }
+
+        // Response format: Responses API uses text.format (flattened), Chat Completions uses response_format
+        if (useResponsesAPI) {
+            let format = responseFormat || { type: "json_object" };
+            // Responses API text.format uses a flatter structure: name/schema are siblings of type,
+            // not nested inside json_schema. Transform from Chat Completions format if needed.
+            if (format.type === 'json_schema' && format.json_schema) {
+                format = {
+                    type: 'json_schema',
+                    name: format.json_schema.name,
+                    schema: format.json_schema.schema
+                };
+                if (format.schema) format.strict = true;
+            }
+            payload.text = { format };
+        } else {
+            payload.response_format = responseFormat || { type: "json_object" };
+        }
+
+        if (useResponsesAPI) {
+            // Responses API: use 'input' array
+            payload.input = [
+                { role: "system", content: systemPrompt || "You are a helpful assistant that outputs JSON." },
                 { role: "user", content: prompt }
-            ],
-            temperature: params.temperature,
-            max_tokens: params.max_tokens,
-            top_p: params.top_p,
-            response_format: { type: "json_object" }
-        };
+            ];
+        } else {
+            // Chat Completions API: use 'messages' array
+            payload.messages = [
+                { role: "system", content: systemPrompt || "You are a helpful assistant that outputs JSON." },
+                { role: "user", content: prompt }
+            ];
+        }
+
+        return payload;
     }
 
-    _constructPayloadAnthropic(model, prompt, params) {
+    _constructPayloadAnthropic(model, prompt, params, { systemPrompt = null } = {}) {
+        // Build payload with hyperparams first, messages last (for readability in Raw Request preview)
         const payload = {
             model: model,
-            max_tokens: params.max_tokens,
-            messages: [{ role: 'user', content: prompt }]
+            max_tokens: params.max_tokens
         };
 
-        // Anthropic models (like Opus) often don't allow both temperature and top_p.
+        // Anthropic models don't allow both temperature and top_p.
         // If top_p is set to something other than 1.0, we prioritize it and omit temperature.
         if (params.top_p !== undefined && params.top_p !== 1.0) {
             payload.top_p = params.top_p;
@@ -449,32 +608,75 @@ ${systemPrompt}`;
             payload.temperature = params.temperature !== undefined ? params.temperature : 0.0;
         }
 
+        // top_k: only include if explicitly set and > 0
+        if (params.top_k !== undefined && params.top_k > 0) {
+            payload.top_k = params.top_k;
+        }
+
+        // System prompt from template (if provided)
+        if (systemPrompt) {
+            payload.system = systemPrompt;
+        }
+
+        // Messages last (prompt content is long, keep at bottom for readability)
+        payload.messages = [{ role: 'user', content: prompt }];
+
         return payload;
     }
 
-    _constructPayloadGemini(model, prompt, params) {
-        return {
-            contents: [{
-                parts: [{ text: prompt + "\n\nReturn JSON output." }]
-            }],
-            generationConfig: {
-                temperature: params.temperature,
-                maxOutputTokens: params.max_tokens,
-                topP: params.top_p
-            }
+    _constructPayloadGemini(model, prompt, params, { systemPrompt = null } = {}) {
+        const config = {
+            temperature: params.temperature,
+            maxOutputTokens: params.max_tokens,
+            topP: params.top_p
         };
+        if (params.top_k !== undefined && params.top_k > 0) {
+            config.topK = params.top_k;
+        }
+        if (params.presence_penalty !== undefined && params.presence_penalty !== 0) {
+            config.presencePenalty = params.presence_penalty;
+        }
+        if (params.frequency_penalty !== undefined && params.frequency_penalty !== 0) {
+            config.frequencyPenalty = params.frequency_penalty;
+        }
+        // generationConfig first, contents last (prompt content is long, keep at bottom for readability)
+        const payload = {
+            generationConfig: config
+        };
+        if (systemPrompt) {
+            payload.systemInstruction = { parts: [{ text: systemPrompt }] };
+        }
+        payload.contents = [{
+            parts: [{ text: prompt + "\n\nReturn JSON output." }]
+        }];
+        return payload;
     }
 
-    async _callOpenAI(apiKey, model, prompt, params, overridePayload = null) {
-        const requestPayload = overridePayload || this._constructPayloadOpenAI(model, prompt, params);
+    async _callOpenAI(apiKey, model, prompt, params, overridePayload = null, templateOpts = {}) {
+        const requestPayload = overridePayload || this._constructPayloadOpenAI(model, prompt, params, templateOpts);
 
-        const response = await axios.post('https://api.openai.com/v1/chat/completions', requestPayload, {
+        // Detect Responses API format: payload has 'input' key (GPT-5.x, o-series)
+        const isResponsesAPI = !!requestPayload.input;
+        const endpoint = isResponsesAPI
+            ? 'https://api.openai.com/v1/responses'
+            : 'https://api.openai.com/v1/chat/completions';
+
+        const response = await axios.post(endpoint, requestPayload, {
             headers: { 'Authorization': `Bearer ${apiKey}` }
         });
 
-        const rawText = response.data.choices[0].message.content;
-        const totalTokens = this._extractTokens(response.data, 'openai');
+        let rawText;
+        if (isResponsesAPI) {
+            // Responses API: find the message output item
+            const msgOutput = response.data.output?.find(o => o.type === 'message');
+            const textContent = msgOutput?.content?.find(c => c.type === 'output_text');
+            rawText = textContent?.text || '';
+        } else {
+            // Chat Completions API
+            rawText = response.data.choices[0].message.content;
+        }
 
+        const totalTokens = this._extractTokens(response.data, 'openai');
 
         return {
             parsed: JSON.parse(rawText),
@@ -485,8 +687,8 @@ ${systemPrompt}`;
         };
     }
 
-    async _callAnthropic(apiKey, model, prompt, params, overridePayload = null) {
-        const requestPayload = overridePayload || this._constructPayloadAnthropic(model, prompt, params);
+    async _callAnthropic(apiKey, model, prompt, params, overridePayload = null, templateOpts = {}) {
+        const requestPayload = overridePayload || this._constructPayloadAnthropic(model, prompt, params, templateOpts);
 
         const response = await axios.post('https://api.anthropic.com/v1/messages', requestPayload, {
             headers: {
@@ -511,9 +713,9 @@ ${systemPrompt}`;
         };
     }
 
-    async _callGemini(apiKey, model, prompt, params, overridePayload = null) {
+    async _callGemini(apiKey, model, prompt, params, overridePayload = null, templateOpts = {}) {
         const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${apiKey}`;
-        const requestPayload = overridePayload || this._constructPayloadGemini(model, prompt, params);
+        const requestPayload = overridePayload || this._constructPayloadGemini(model, prompt, params, templateOpts);
 
         const response = await axios.post(url, requestPayload);
 
@@ -521,6 +723,66 @@ ${systemPrompt}`;
         let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         const totalTokens = this._extractTokens(response.data, 'gemini');
 
+
+        return {
+            parsed: JSON.parse(cleanedText),
+            rawText: rawText,
+            fullResponse: JSON.stringify(response.data, null, 2),
+            requestPayload: JSON.stringify(requestPayload, null, 2),
+            totalTokens: totalTokens
+        };
+    }
+
+    async _callDeepSeek(apiKey, model, prompt, params, overridePayload = null, templateOpts = {}) {
+        const requestPayload = overridePayload || this._constructPayloadOpenAI(model, prompt, params, templateOpts);
+
+        const response = await axios.post('https://api.deepseek.com/v1/chat/completions', requestPayload, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+
+        const rawText = response.data.choices[0].message.content;
+        let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const totalTokens = this._extractTokens(response.data, 'deepseek');
+
+        return {
+            parsed: JSON.parse(cleanedText),
+            rawText: rawText,
+            fullResponse: JSON.stringify(response.data, null, 2),
+            requestPayload: JSON.stringify(requestPayload, null, 2),
+            totalTokens: totalTokens
+        };
+    }
+
+    async _callKimi(apiKey, model, prompt, params, overridePayload = null, templateOpts = {}) {
+        const requestPayload = overridePayload || this._constructPayloadOpenAI(model, prompt, params, templateOpts);
+
+        const response = await axios.post('https://api.moonshot.ai/v1/chat/completions', requestPayload, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+
+        const rawText = response.data.choices[0].message.content;
+        let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const totalTokens = this._extractTokens(response.data, 'kimi');
+
+        return {
+            parsed: JSON.parse(cleanedText),
+            rawText: rawText,
+            fullResponse: JSON.stringify(response.data, null, 2),
+            requestPayload: JSON.stringify(requestPayload, null, 2),
+            totalTokens: totalTokens
+        };
+    }
+
+    async _callQwen(apiKey, model, prompt, params, overridePayload = null, templateOpts = {}) {
+        const requestPayload = overridePayload || this._constructPayloadOpenAI(model, prompt, params, templateOpts);
+
+        const response = await axios.post('https://dashscope-intl.aliyuncs.com/compatible-mode/v1/chat/completions', requestPayload, {
+            headers: { 'Authorization': `Bearer ${apiKey}` }
+        });
+
+        const rawText = response.data.choices[0].message.content;
+        let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
+        const totalTokens = this._extractTokens(response.data, 'qwen');
 
         return {
             parsed: JSON.parse(cleanedText),

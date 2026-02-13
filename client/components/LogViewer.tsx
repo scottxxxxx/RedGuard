@@ -179,7 +179,7 @@ export default function LogViewer() {
                     </div>
                     <div className="bg-stats-bg border border-stats-border rounded-lg p-4">
                         <div className="text-2xl font-bold text-info-text">{stats.byType['kore_chat'] || 0}</div>
-                        <div className="text-sm text-[var(--foreground-muted)]">Kore.AI Calls</div>
+                        <div className="text-sm text-[var(--foreground-muted)]">Chat Messages</div>
                     </div>
                     <div className="bg-stats-bg border border-stats-border rounded-lg p-4">
                         <div className="text-2xl font-bold text-badge-purple-text">{stats.byType['llm_evaluate'] || 0}</div>
@@ -234,9 +234,16 @@ export default function LogViewer() {
                     className="px-3 py-2 border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-lg"
                 />
                 <button
-                    onClick={fetchLogs}
-                    className="px-4 py-2 bg-[var(--primary-600)] text-white rounded-lg hover:bg-[var(--primary-700)]"
+                    onClick={() => { setCurrentPage(1); setExpandedLog(null); fetchLogs(); fetchStats(); }}
+                    disabled={loading}
+                    className="px-4 py-2 bg-[var(--primary-600)] text-white rounded-lg hover:bg-[var(--primary-700)] disabled:opacity-60 flex items-center gap-2"
                 >
+                    {loading && (
+                        <svg className="animate-spin h-3.5 w-3.5 text-white" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                        </svg>
+                    )}
                     Refresh
                 </button>
             </div>
@@ -319,8 +326,17 @@ export default function LogViewer() {
                                         <td className="px-4 py-3 text-sm text-[var(--foreground-secondary)]">
                                             {log.latencyMs ? `${log.latencyMs.toLocaleString()}ms` : '-'}
                                         </td>
-                                        <td className="px-4 py-3 text-sm text-[var(--foreground-muted)]">
-                                            {log.isError ? log.errorMessage?.substring(0, 50) : 'Click to expand'}
+                                        <td className="px-4 py-3 text-sm text-[var(--foreground-muted)] max-w-[300px] truncate">
+                                            {log.isError
+                                                ? log.errorMessage?.substring(0, 50)
+                                                : log.logType === 'kore_chat'
+                                                    ? (() => {
+                                                        try {
+                                                            const req = typeof log.requestBody === 'string' ? JSON.parse(log.requestBody) : log.requestBody;
+                                                            return req?.message ? `💬 ${req.message}` : 'Click to expand';
+                                                        } catch { return 'Click to expand'; }
+                                                    })()
+                                                    : 'Click to expand'}
                                         </td>
                                     </tr>
                                     {expandedLog === log.id && (
@@ -357,42 +373,70 @@ export default function LogViewer() {
             </div>
 
             {/* Pagination Controls */}
-            {totalLogs > pageSize && (
-                <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
-                    <div className="text-sm text-[var(--foreground-muted)]">
-                        Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalLogs)} of {totalLogs} logs
-                    </div>
-                    <div className="flex items-center gap-1">
-                        <button
-                            onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setExpandedLog(null); }}
-                            disabled={currentPage === 1}
-                            className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                            ← Previous
-                        </button>
-                        {Array.from({ length: Math.ceil(totalLogs / pageSize) }, (_, i) => i + 1).map(page => (
+            {totalLogs > pageSize && (() => {
+                const totalPages = Math.ceil(totalLogs / pageSize);
+                const groupSize = 20;
+                const currentGroup = Math.floor((currentPage - 1) / groupSize);
+                const groupStart = currentGroup * groupSize + 1;
+                const groupEnd = Math.min(groupStart + groupSize - 1, totalPages);
+
+                return (
+                    <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
+                        <div className="text-sm text-[var(--foreground-muted)]">
+                            Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalLogs)} of {totalLogs} logs
+                        </div>
+                        <div className="flex items-center gap-1">
+                            {/* Previous group */}
+                            {groupStart > 1 && (
+                                <button
+                                    onClick={() => { setCurrentPage(groupStart - 1); setExpandedLog(null); }}
+                                    className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors"
+                                    title={`Pages ${groupStart - groupSize}–${groupStart - 1}`}
+                                >
+                                    ←
+                                </button>
+                            )}
                             <button
-                                key={page}
-                                onClick={() => { setCurrentPage(page); setExpandedLog(null); }}
-                                className={`w-7 h-7 text-xs font-medium rounded transition-colors ${
-                                    page === currentPage
-                                        ? 'bg-[var(--primary-600)] text-white'
-                                        : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
-                                }`}
+                                onClick={() => { setCurrentPage(p => Math.max(1, p - 1)); setExpandedLog(null); }}
+                                disabled={currentPage === 1}
+                                className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
                             >
-                                {page}
+                                Prev
                             </button>
-                        ))}
-                        <button
-                            onClick={() => { setCurrentPage(p => Math.min(Math.ceil(totalLogs / pageSize), p + 1)); setExpandedLog(null); }}
-                            disabled={currentPage === Math.ceil(totalLogs / pageSize)}
-                            className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                        >
-                            Next →
-                        </button>
+                            {Array.from({ length: groupEnd - groupStart + 1 }, (_, i) => groupStart + i).map(page => (
+                                <button
+                                    key={page}
+                                    onClick={() => { setCurrentPage(page); setExpandedLog(null); }}
+                                    className={`w-7 h-7 text-xs font-medium rounded transition-colors ${
+                                        page === currentPage
+                                            ? 'bg-[var(--primary-600)] text-white'
+                                            : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
+                                    }`}
+                                >
+                                    {page}
+                                </button>
+                            ))}
+                            <button
+                                onClick={() => { setCurrentPage(p => Math.min(totalPages, p + 1)); setExpandedLog(null); }}
+                                disabled={currentPage === totalPages}
+                                className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                            >
+                                Next
+                            </button>
+                            {/* Next group */}
+                            {groupEnd < totalPages && (
+                                <button
+                                    onClick={() => { setCurrentPage(groupEnd + 1); setExpandedLog(null); }}
+                                    className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors"
+                                    title={`Pages ${groupEnd + 1}–${Math.min(groupEnd + groupSize, totalPages)}`}
+                                >
+                                     →
+                                </button>
+                            )}
+                        </div>
                     </div>
-                </div>
-            )}
+                );
+            })()}
         </div>
     );
 }

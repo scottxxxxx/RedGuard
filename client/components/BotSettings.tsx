@@ -98,77 +98,12 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                 }
             } catch (greetingError) {
                 console.log('[BotSettings] Could not get greeting:', greetingError);
-                // Fallback greeting if bot doesn't respond
-                greetingMessage = 'Connected to bot. You can start chatting now.';
             }
         }
 
-        if (greetingMessage && onConnect) {
-            onConnect(greetingMessage);
-        }
-    };
-
-    const attemptBotExport = async (currentConfig: BotConfig) => {
-        try {
-            console.log('[BotSettings] Attempting to export App Definition for automatic guardrail configuration...');
-
-            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/export-bot`;
-            const response = await fetch(apiUrl, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    botConfig: currentConfig,
-                    userId: userId || 'unknown'
-                })
-            });
-
-            const data = await response.json();
-
-            if (!response.ok) {
-                // Check if it's a scope error
-                if (response.status === 403 && data.scopeRequired) {
-                    console.log('[BotSettings] Bot/App Export scope not enabled');
-                    showToast(
-                        'Optional: Enable Bot/App Export for Automatic Configuration\n\n' +
-                        'RedGuard can automatically retrieve your App Definition and configure guardrail settings for you.\n\n' +
-                        'Benefits:\n' +
-                        '• Auto-populate guardrail configuration from your bot\n' +
-                        '• No need to manually upload App Definition files\n' +
-                        '• Stay in sync with bot changes\n\n' +
-                        'To enable:\n' +
-                        '1. Go to Kore.ai → App Settings → Dev Tools → Apps\n' +
-                        '2. Click "Edit App Definition" on your JWT App\n' +
-                        '3. Go to Automation tab → Scopes section\n' +
-                        '4. Enable: "Bot/App Export"\n' +
-                        '5. Save and reconnect to RedGuard',
-                        'info'
-                    );
-                } else {
-                    console.warn('[BotSettings] Bot export failed:', data.error);
-                }
-                return;
-            }
-
-            // Successfully exported App Definition
-            console.log('[BotSettings] App Definition exported successfully');
-
-            if (data.botDefinition) {
-                // Parse the App Definition and extract guardrail configuration
-                // This would call the same parser we use for uploaded App Definition files
-                showToast(
-                    'App Definition Retrieved!\n\n' +
-                    'RedGuard has automatically exported your App Definition and detected guardrail settings.\n\n' +
-                    'Check the "Define Guardrails" section below to review the auto-configured settings.',
-                    'success'
-                );
-
-                // TODO: Parse data.botDefinition and update guardrail settings
-                // This would involve calling the bot-config-analyzer service
-                // and updating the GuardrailSettings component
-            }
-        } catch (error) {
-            // Silent failure - bot export is optional, don't disrupt the connection flow
-            console.warn('[BotSettings] Bot export attempt failed:', error);
+        // Always call onConnect — use fallback greeting if bot didn't return one
+        if (onConnect) {
+            onConnect(greetingMessage || 'Connected to bot. You can start chatting now.');
         }
     };
 
@@ -489,8 +424,6 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                                 )
                             ]);
 
-                            // After successful connection, attempt to export bot definition for automatic guardrail configuration
-                            attemptBotExport(config);
                         } catch (err: any) {
                             console.error('[BotSettings] Connection error:', err);
 
