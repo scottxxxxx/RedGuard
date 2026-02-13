@@ -3,7 +3,7 @@ name: Build and Deploy to GCP
 # Run this workflow whenever code is pushed to the main branch
 on:
   push:
-    branches: [ "main" ]
+    branches: ["main"]
   workflow_dispatch:
 
 env:
@@ -17,8 +17,8 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     permissions:
-      contents: 'read'
-      packages: 'write'
+      contents: "read"
+      packages: "write"
 
     steps:
       - name: Checkout
@@ -59,18 +59,25 @@ jobs:
       # ------------------------------------------------------------------
       # 3. Deploy to GCP Compute Engine via SSH
       # ------------------------------------------------------------------
+      # ------------------------------------------------------------------
+      # 3. Deploy to GCP Compute Engine via SSH
+      # ------------------------------------------------------------------
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
           host: ${{ secrets.GCP_HOST }}
           username: ${{ secrets.GCP_USERNAME }}
           key: ${{ secrets.GCP_SSH_KEY }}
+          passphrase: ${{ secrets.GCP_SSH_PASSPHRASE }}
+          timeout: 30m
+          command_timeout: 30m
           script: |
             # Login to GHCR on the server (using sudo for docker)
             echo "${{ secrets.GITHUB_TOKEN }}" | sudo docker login ghcr.io -u ${{ github.actor }} --password-stdin
 
             # Create/Update the docker-compose.prod.yml on the server
-            cat <<EOF > docker-compose.prod.yml
+            # Use sudo tee to avoid permission issues if file is owned by root
+            cat <<EOF | sudo tee docker-compose.prod.yml > /dev/null
             version: '3.8'
             services:
               server:
@@ -98,12 +105,12 @@ jobs:
                   - GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
                 depends_on:
                   - server
-            
+
             volumes:
               redguard_data:
             EOF
-            
-            # Prune old images to free up space
+
+            # Prune simply to free up space (aggressive cleanup)
             sudo docker system prune -af
 
             # Pull latest images and restart (using sudo)
