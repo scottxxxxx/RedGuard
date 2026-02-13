@@ -107,7 +107,11 @@ jobs:
                 command: 
                   - |
                     echo "redguard.scottguida.com {
+                      # Prioritize NextAuth routes to the client
+                      reverse_proxy /api/auth/* client:3000
+                      # Send other API routes to the backend server
                       reverse_proxy /api/* server:3001
+                      # All strictly frontend routes go to client
                       reverse_proxy * client:3000
                     }" > /etc/caddy/Caddyfile
                     caddy run --config /etc/caddy/Caddyfile
