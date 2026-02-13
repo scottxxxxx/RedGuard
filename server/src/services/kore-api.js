@@ -5,6 +5,7 @@ const { v4: uuidv4 } = require('uuid');
 class KoreApiService {
     generateJWT(clientId, clientSecret, userId) {
         const payload = {
+            appId: clientId,  // Required for API authentication
             iat: Math.floor(Date.now() / 1000),
             exp: Math.floor(Date.now() / 1000) + 3600,
             jti: uuidv4(),
@@ -12,7 +13,9 @@ class KoreApiService {
             sub: userId || "redguard_admin",
             aud: "https://idproxy.kore.ai/authorize",
         };
-        return jwt.sign(payload, clientSecret, { algorithm: 'HS256' });
+        console.log(`[DEBUG] JWT Payload:`, JSON.stringify(payload, null, 2));
+        const token = jwt.sign(payload, clientSecret, { algorithm: 'HS256' });
+        return token;
     }
 
     async getLLMUsageLogs(config, filters) {
@@ -63,6 +66,89 @@ class KoreApiService {
         }
     }
 
+    async exportBot(config) {
+        const { host = "platform.kore.ai", botId, clientId, clientSecret } = config;
+
+        if (!botId || !clientId || !clientSecret) {
+            throw new Error("Missing Bot Configuration (Bot ID, Client ID, Secret)");
+        }
+
+        const token = this.generateJWT(clientId, clientSecret);
+        const cleanHost = host.replace(/^https?:\/\//, '').replace(/\/$/, '');
+
+        try {
+            // Initiate bot export
+            const exportUrl = `https://${cleanHost}/api/public/bot/${botId}/export`;
+
+            console.log(`[DEBUG] Initiating App Definition export from ${exportUrl}...`);
+            const exportResponse = await axios.post(exportUrl, {
+                exportType: 'published', // or 'inDevelopment'
+            }, {
+                headers: {
+                    'auth': token,
+                    'Content-Type': 'application/json'
+                }
+            });
+
+            const exportId = exportResponse.data.exportId || exportResponse.data._id;
+            console.log(`[DEBUG] App Definition export initiated with ID: ${exportId}`);
+
+            // Poll for export completion (max 30 seconds)
+            const maxAttempts = 30;
+            let attempt = 0;
+
+            while (attempt < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 1000)); // Wait 1 second
+
+                const statusUrl = `https://${cleanHost}/api/public/bot/${botId}/export/${exportId}`;
+                const statusResponse = await axios.get(statusUrl, {
+                    headers: {
+                        'auth': token,
+                        'Content-Type': 'application/json'
+                    }
+                });
+
+                const status = statusResponse.data.status || statusResponse.data.exportStatus;
+                console.log(`[DEBUG] Export status check ${attempt + 1}/${maxAttempts}: ${status}`);
+
+                if (status === 'success' || status === 'completed') {
+                    // Download the exported App Definition
+                    const downloadUrl = statusResponse.data.downloadURL || statusResponse.data.fileId;
+
+                    if (downloadUrl) {
+                        console.log(`[DEBUG] Downloading App Definition from: ${downloadUrl}`);
+                        const botDefResponse = await axios.get(downloadUrl, {
+                            headers: { 'auth': token }
+                        });
+
+                        return botDefResponse.data; // Return the App Definition
+                    } else {
+                        throw new Error("App Definition export completed but no download URL provided");
+                    }
+                } else if (status === 'failed' || status === 'error') {
+                    throw new Error(`App Definition export failed: ${statusResponse.data.message || 'Unknown error'}`);
+                }
+
+                attempt++;
+            }
+
+            throw new Error("App Definition export timed out after 30 seconds");
+        } catch (error) {
+            const status = error.response?.status;
+            const errorData = error.response?.data;
+
+            console.error(`[DEBUG] App Definition export failed (${status}):`, error.message);
+            console.log(`[DEBUG] Kore.ai Error Response:`, JSON.stringify(errorData, null, 2));
+
+            if (status === 401 || status === 403) {
+                const errorMsg = errorData?.errors?.[0]?.msg || errorData?.message || "Permission denied";
+                throw new Error(`Bot/App Export scope not enabled: ${errorMsg}`);
+            }
+
+            throw new Error(`Failed to export App Definition: ${error.message}`);
+        }
+    }
+
     async getBotInfo(config) {
         const { host = "platform.kore.ai", botId, clientId, clientSecret, inspectorClientId, inspectorClientSecret } = config;
 
@@ -82,7 +168,10 @@ class KoreApiService {
             // Note: This requires "Admin API Context" and "Role Management" scope usually
             const url = `https://${cleanHost}/api/public/bots`;
 
-            console.log(`Attempting to fetch bot name for ${botId} from ${url}...`);
+            console.log(`[DEBUG] Attempting to fetch bot name for ${botId} from ${url}...`);
+            console.log(`[DEBUG] Using Client ID: ${effectiveClientId}`);
+            console.log(`[DEBUG] JWT Token (first 50 chars): ${token.substring(0, 50)}...`);
+
             const response = await axios.get(url, {
                 headers: {
                     'auth': token,
@@ -109,26 +198,28 @@ class KoreApiService {
             }
         } catch (error) {
             const status = error.response?.status;
+            const errorData = error.response?.data;
             console.warn(`Kore Bot Info fetch failed (${status}):`, error.message);
+            console.log(`[DEBUG] Kore.ai Error Response:`, JSON.stringify(errorData, null, 2));
 
-            // If it's a 401/403, we know auth failed
-            if (status === 401 || status === 403) {
-                throw new Error("Authentication failed with provided credentials.");
-            }
-
-            // For other errors (like 404 or just scope restriction on /bots), 
-            // we try a minimal "ping" to the logs API to at least verify credentials for the actual work we do
+            // Bot Info API might require different scopes than Gen AI Logs API
+            // Try Gen AI Logs API as fallback to verify credentials work for what we actually need
+            console.log(`[DEBUG] Bot Info API failed, trying Gen AI Logs API as fallback...`);
             try {
                 const now = new Date().toISOString();
                 await this.getLLMUsageLogs(config, { dateFrom: now, dateTo: now, limit: 1 });
+                console.log(`[DEBUG] Gen AI Logs API works! Credentials are valid for evaluation.`);
                 return {
                     name: null,
                     id: botId,
                     valid: true,
-                    message: "Connection verified, but bot name retrieval restricted by scope."
+                    message: "Connection verified via Gen AI Logs API (Bot Info API requires different scopes)"
                 };
             } catch (pingError) {
-                throw new Error(`Connection failed: ${pingError.message}`);
+                console.error(`[DEBUG] Gen AI Logs API also failed:`, pingError.message);
+                // Both APIs failed - credentials are truly invalid
+                const errorMsg = errorData?.errors?.[0]?.msg || errorData?.message || "Authentication failed with provided credentials.";
+                throw new Error(`Credential validation failed: ${errorMsg}. Gen AI Logs API also failed: ${pingError.message}`);
             }
         }
     }

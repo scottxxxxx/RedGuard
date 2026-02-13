@@ -367,423 +367,378 @@ function HomeContent() {
 
     return (
         <div className="h-screen bg-[var(--background)] flex flex-col">
-                {/* Top Navigation Bar */}
-                <nav className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-50">
-                    <div className="w-full px-4 sm:px-6 lg:px-8">
-                        <div className="flex justify-between h-20 items-center">
-                            <div className="flex items-center gap-3">
-                                <img
-                                    src="/logo.svg"
-                                    alt="RedGuard Logo"
-                                    className="h-16 w-auto object-contain"
-                                />
-                                <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                                <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.3</span>
-                            </div>
-                            <div className="flex items-center gap-4">
-                                <AuthButton />
-                                <ThemeSwitcher />
-                            </div>
+            {/* Top Navigation Bar */}
+            <nav className="bg-[var(--surface)] border-b border-[var(--border)] sticky top-0 z-50">
+                <div className="w-full px-4 sm:px-6 lg:px-8">
+                    <div className="flex justify-between h-20 items-center">
+                        <div className="flex items-center gap-3">
+                            <img
+                                src="/logo.svg"
+                                alt="RedGuard Logo"
+                                className="h-16 w-auto object-contain"
+                            />
+                            <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
+                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.5</span>
+                        </div>
+                        <div className="flex items-center gap-4">
+                            <AuthButton />
+                            <ThemeSwitcher />
                         </div>
                     </div>
-                </nav>
+                </div>
+            </nav>
 
-                {/* Sign In Modal */}
-                <SignInModal isOpen={showSignInModal} onClose={() => setShowSignInModal(false)} />
+            {/* Sign In Modal */}
+            <SignInModal isOpen={showSignInModal} onClose={() => setShowSignInModal(false)} />
 
-                {/* Main Content - Always Visible */}
-                <div className="flex flex-1 overflow-hidden">
+            {/* Main Content - Always Visible */}
+            <div className="flex flex-1 overflow-hidden">
 
-                    {/* Sidebar */}
-                    <aside
-                        className={`bg-surface border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative ${
-                            isSidebarExpanded || isSidebarHovered ? 'w-64' : 'w-16'
+                {/* Sidebar */}
+                <aside
+                    className={`bg-surface border-r border-border flex flex-col flex-shrink-0 transition-all duration-300 ease-in-out relative ${isSidebarExpanded || isSidebarHovered ? 'w-64' : 'w-16'
                         }`}
-                        onMouseEnter={() => isAuthenticated && setIsSidebarHovered(true)}
-                        onMouseLeave={() => isAuthenticated && setIsSidebarHovered(false)}
-                    >
-                        {/* Auth Overlay for Sidebar */}
-                        {!isAuthenticated && !isLoading && (
-                            <div className="absolute inset-0 bg-[var(--surface)]/70 backdrop-blur-[1px] z-50 pointer-events-all" />
-                        )}
+                    onMouseEnter={() => isAuthenticated && setIsSidebarHovered(true)}
+                    onMouseLeave={() => isAuthenticated && setIsSidebarHovered(false)}
+                >
+                    {/* Auth Overlay for Sidebar */}
+                    {!isAuthenticated && !isLoading && (
+                        <div className="absolute inset-0 bg-[var(--surface)]/70 backdrop-blur-[1px] z-50 pointer-events-all" />
+                    )}
 
-                        {/* Toggle Button - Vertically Centered */}
-                        <button
-                            onClick={() => isAuthenticated && setIsSidebarExpanded(!isSidebarExpanded)}
-                            disabled={!isAuthenticated}
-                            className="absolute top-1/2 -translate-y-1/2 right-1 p-1.5 rounded-md hover:bg-sidebar-hover text-foreground transition-all z-10 border border-[var(--border)] bg-[var(--surface)] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
-                            title={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                    {/* Toggle Button - Vertically Centered */}
+                    <button
+                        onClick={() => isAuthenticated && setIsSidebarExpanded(!isSidebarExpanded)}
+                        disabled={!isAuthenticated}
+                        className="absolute top-1/2 -translate-y-1/2 right-1 p-1.5 rounded-md hover:bg-sidebar-hover text-foreground transition-all z-10 border border-[var(--border)] bg-[var(--surface)] shadow-sm disabled:opacity-50 disabled:cursor-not-allowed"
+                        title={isSidebarExpanded ? "Collapse sidebar" : "Expand sidebar"}
+                    >
+                        <svg
+                            className={`h-3.5 w-3.5 transition-transform duration-300 ${isSidebarExpanded ? 'rotate-180' : ''}`}
+                            fill="none"
+                            viewBox="0 0 24 24"
+                            stroke="currentColor"
                         >
-                            <svg
-                                className={`h-3.5 w-3.5 transition-transform duration-300 ${isSidebarExpanded ? 'rotate-180' : ''}`}
-                                fill="none"
-                                viewBox="0 0 24 24"
-                                stroke="currentColor"
-                            >
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                        </svg>
+                    </button>
+
+                    <div className="p-4 space-y-1">
+
+                        <button
+                            onClick={() => setCurrentView('evaluator')}
+                            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'evaluator'
+                                ? 'bg-sidebar-active text-sidebar-active-text'
+                                : 'text-foreground hover:bg-sidebar-hover'
+                                }`}
+                            title="Guardrail Evaluator"
+                        >
+                            <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                             </svg>
+                            <span className={`whitespace-nowrap transition-all duration-300 ${isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
+                                }`}>
+                                Guardrail Evaluator
+                            </span>
                         </button>
 
-                        <div className="p-4 space-y-1">
-
-                            <button
-                                onClick={() => setCurrentView('evaluator')}
-                                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'evaluator'
-                                    ? 'bg-sidebar-active text-sidebar-active-text'
-                                    : 'text-foreground hover:bg-sidebar-hover'
-                                    }`}
-                                title="Guardrail Evaluator"
-                            >
-                                <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                </svg>
-                                <span className={`whitespace-nowrap transition-all duration-300 ${
-                                    isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
+                        <button
+                            onClick={() => setCurrentView('logs')}
+                            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'logs'
+                                ? 'bg-sidebar-active text-sidebar-active-text'
+                                : 'text-foreground hover:bg-sidebar-hover'
+                                }`}
+                            title="System Logs"
+                        >
+                            <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 01-2-2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                            </svg>
+                            <span className={`whitespace-nowrap transition-all duration-300 ${isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
                                 }`}>
-                                    Guardrail Evaluator
-                                </span>
-                            </button>
+                                System Logs
+                            </span>
+                        </button>
+                    </div>
+                </aside>
 
-                            <button
-                                onClick={() => setCurrentView('logs')}
-                                className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'logs'
-                                    ? 'bg-sidebar-active text-sidebar-active-text'
-                                    : 'text-foreground hover:bg-sidebar-hover'
-                                    }`}
-                                title="System Logs"
-                            >
-                                <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 01-2-2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
-                                </svg>
-                                <span className={`whitespace-nowrap transition-all duration-300 ${
-                                    isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
-                                }`}>
-                                    System Logs
-                                </span>
-                            </button>
-                        </div>
-                    </aside>
-
-                    {/* Main Content Area */}
-                    <main className="flex-1 overflow-auto bg-[var(--background)] p-8 relative">
-                        {/* Auth Blocking Overlay */}
-                        {!isAuthenticated && !isLoading && (
-                            <div className="absolute inset-0 bg-[var(--background)]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
-                                <div className="bg-[var(--surface)] rounded-2xl shadow-2xl border-2 border-[var(--primary-500)] p-8 max-w-md text-center animate-fade-in">
-                                    {/* Google Logo */}
-                                    <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
-                                        <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                                        </svg>
-                                    </div>
-
-                                    <h2 className="text-2xl font-bold text-[var(--foreground)] mb-3">
-                                        Welcome to RedGuard
-                                    </h2>
-
-                                    <p className="text-sm text-[var(--foreground-muted)] mb-6 leading-relaxed">
-                                        Sign in with your Google account to configure bots, test guardrails, and save your evaluation history.
-                                    </p>
-
-                                    <button
-                                        onClick={() => signIn('google')}
-                                        className="w-full flex items-center justify-center gap-3 px-6 py-3.5 text-base font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-xl transition-all shadow-lg hover:shadow-xl hover:scale-105"
-                                    >
-                                        <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
-                                            <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                                            <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                                            <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                                            <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                                        </svg>
-                                        Sign in with Google
-                                    </button>
+                {/* Main Content Area */}
+                <main className="flex-1 overflow-auto bg-[var(--background)] p-8 relative">
+                    {/* Auth Blocking Overlay */}
+                    {!isAuthenticated && !isLoading && (
+                        <div className="absolute inset-0 bg-[var(--background)]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
+                            <div className="bg-[var(--surface)] rounded-2xl shadow-2xl border-2 border-[var(--primary-500)] p-8 max-w-md text-center animate-fade-in">
+                                {/* Google Logo */}
+                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
+                                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                                    </svg>
                                 </div>
-                            </div>
-                        )}
 
-                        {/* Evaluator View */}
-                        <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
-                            <RedGuardIntro />
+                                <h2 className="text-2xl font-bold text-[var(--foreground)] mb-3">
+                                    Welcome to RedGuard
+                                </h2>
 
+                                <p className="text-sm text-[var(--foreground-muted)] mb-6 leading-relaxed">
+                                    Sign in with your Google account to configure bots, test guardrails, and save your evaluation history.
+                                </p>
 
-                            {/* Tab Headers */}
-                            <div className="border-b border-[var(--border)] mb-6">
-                                <nav className="-mb-px flex space-x-8" aria-label="Tabs">
-                                    <button
-                                        onClick={() => setActiveTab('live')}
-                                        className={`${activeTab === 'live'
-                                            ? 'border-[var(--primary-500)] text-[var(--primary-600)]'
-                                            : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
-                                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                                    >
-                                        Live Verification Console
-                                    </button>
-                                    <button
-                                        onClick={() => setActiveTab('batch')}
-                                        className={`${activeTab === 'batch'
-                                            ? 'border-[var(--primary-500)] text-[var(--primary-600)]'
-                                            : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
-                                            } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
-                                    >
-                                        Batch Tester (CSV)
-                                    </button>
-                                </nav>
-                            </div>
-
-                            {/* Live Tab Content */}
-                            <div className={activeTab === 'live' ? '' : 'hidden'}>
-                                <div className="space-y-6">
-                                    {/* Row 1: Bot Config & Chat Console */}
-                                    <div>
-                                        <div className="mb-3">
-                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Setup Connection</h3>
-                                            <p className="text-xs text-[var(--foreground-muted)]">Connect your bot, chat to test responses, and generate adversarial attacks.</p>
-                                        </div>
-                                        <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
-                                            <div className="col-span-4 h-full min-h-0">
-                                                <BotSettings
-                                                    onConfigChange={setBotConfig}
-                                                    onConnect={handleBotConnect}
-                                                    onSessionReset={handleSessionReset}
-                                                    onClearConsole={handleClearConsole}
-                                                    onKoreSessionUpdate={setKoreSessionId}
-                                                    onConnectingChange={setIsConnecting}
-                                                    userId={userId}
-                                                    isAuthenticated={isAuthenticated}
-                                                    onAuthRequired={() => setShowSignInModal(true)}
-                                                />
-                                            </div>
-                                            <div className="col-span-8 h-full min-h-0">
-                                                <ChatConsole
-                                                    config={fullGuardrailConfig}
-                                                    botConfig={botConfig}
-                                                    onInteractionUpdate={handleInteractionUpdate}
-                                                    messages={messages}
-                                                    setMessages={setMessages}
-                                                    userId={userId}
-                                                    koreSessionId={koreSessionId}
-                                                    onSessionReset={handleSessionReset}
-                                                    onBotResponse={handleBotResponse}
-                                                    onKoreSessionUpdate={setKoreSessionId}
-                                                    isAuthenticated={isAuthenticated}
-                                                    onAuthRequired={() => setShowSignInModal(true)}
-                                                    isConnecting={isConnecting}
-                                                    isConnected={isConnected}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 2: Guardrail Config & Kore Logs */}
-                                    <div>
-                                        <div className="mb-3 mt-2">
-                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Define guardrails</h3>
-                                            <p className="text-xs text-[var(--foreground-muted)]">Set your safety policies and inspect real-time system logs.</p>
-                                        </div>
-                                        <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
-                                            <div className="col-span-4 h-full min-h-0">
-                                                <GuardrailSettings
-                                                    onConfigChange={setGuardrailPolicy}
-                                                    onBotConfigUpdate={setBotConfig}
-                                                />
-                                            </div>
-                                            <div className="col-span-8 h-full min-h-0">
-                                                <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 3: Evaluation Settings & Inspector */}
-                                    <div>
-                                        <div className="mb-3 mt-2">
-                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Test & Evaluate</h3>
-                                            <p className="text-xs text-[var(--foreground-muted)]">Use predefined guardrail prompts or create custom ones, run evaluations, and analyze results.</p>
-                                        </div>
-                                        <div className="grid grid-cols-12 gap-6">
-                                            <div className="col-span-4">
-                                                <EvaluationSettings onConfigChange={setLlmConfig} />
-                                            </div>
-                                            <div className="col-span-8">
-                                                <EvaluationInspector
-                                                    provider={llmConfig?.provider}
-                                                    prompt={previewPrompt}
-                                                    rawResponse={evalRawResponse}
-                                                    result={evalResult}
-                                                    previewPayload={previewPayload}
-                                                    hyperparams={hyperparams}
-                                                    onHyperparamsChange={setHyperparams}
-                                                    onPromptChange={setPreviewPrompt}
-                                                    onRequestPayloadRegen={handleRequestPayloadRegen}
-                                                    onPayloadChange={setPreviewPayload}
-                                                />
-                                            </div>
-                                        </div>
-                                    </div>
-
-                                    {/* Row 4: Evaluate Button */}
-                                    <div className="relative">
-                                        <div className="flex justify-center mb-2 mt-4">
-                                            <div
-                                                className="relative inline-block"
-                                                onMouseEnter={() => !canRunEvaluation() && setShowTooltip(true)}
-                                                onMouseLeave={() => setShowTooltip(false)}
-                                            >
-                                                <button
-                                                    onClick={handleEvaluateClick}
-                                                    disabled={isEvaluating || !canRunEvaluation()}
-                                                    className="px-6 py-3 text-sm font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-lg shadow-md hover:shadow-lg transform transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none disabled:bg-gray-400"
-                                                >
-                                                    {isEvaluating ? (
-                                                        <span className="flex items-center justify-center gap-2">
-                                                            <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                                                                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                                                                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                                                            </svg>
-                                                            Running Evaluation...
-                                                        </span>
-                                                    ) : (
-                                                        'Perform Guardrail Evaluation'
-                                                    )}
-                                                </button>
-
-                                                {/* Hover Tooltip */}
-                                                {showTooltip && !canRunEvaluation() && (
-                                                    <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 z-50 pointer-events-none">
-                                                        <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 max-w-xs whitespace-nowrap">
-                                                            <div className="font-semibold mb-2">Missing Requirements:</div>
-                                                            <ul className="space-y-1 text-left">
-                                                                {getMissingRequirements().map((req, i) => {
-                                                                    // Extract just the first part before the dash for tooltip
-                                                                    const shortReq = req.split(' - ')[0];
-                                                                    return (
-                                                                        <li key={i} className="flex items-start gap-2">
-                                                                            <span>•</span>
-                                                                            <span>{shortReq}</span>
-                                                                        </li>
-                                                                    );
-                                                                })}
-                                                            </ul>
-                                                            {/* Tooltip arrow */}
-                                                            <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
-                                                                <div className="border-8 border-transparent border-t-gray-900"></div>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                )}
-                                            </div>
-                                        </div>
-
-                                        {/* Requirements Modal */}
-                                        {showRequirementsModal && (
-                                            <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-4 z-50">
-                                                <div className="bg-error-bg border-2 border-error-border rounded-lg shadow-xl p-6 max-w-2xl">
-                                                    <div className="flex items-start justify-between mb-4">
-                                                        <div className="flex items-center gap-2">
-                                                            <svg className="w-6 h-6 text-error-text shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
-                                                            </svg>
-                                                            <h3 className="text-lg font-semibold text-error-text">Cannot Perform Evaluation</h3>
-                                                        </div>
-                                                        <button
-                                                            onClick={() => setShowRequirementsModal(false)}
-                                                            className="text-error-text hover:text-error-text/80 transition-colors"
-                                                        >
-                                                            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                                                            </svg>
-                                                        </button>
-                                                    </div>
-                                                    <div className="space-y-3">
-                                                        <p className="text-sm text-error-text font-medium mb-3">Please complete the following requirements:</p>
-                                                        {missingRequirements.map((item, i) => (
-                                                            <div key={i} className="flex gap-3 text-sm">
-                                                                <span className="text-error-text font-bold shrink-0">{i + 1}.</span>
-                                                                <p className="text-error-text">{item}</p>
-                                                            </div>
-                                                        ))}
-                                                    </div>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    {/* Row 5: History */}
-                                    <div className="mt-8">
-                                        <RunHistory key={runHistoryKey} botId={botConfig?.botId} />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* Batch Tab Content */}
-                            <div className={activeTab === 'batch' ? 'relative' : 'hidden'}>
-                                <BatchTester
-                                    botConfig={botConfig}
-                                    guardrailConfig={fullGuardrailConfig}
-                                />
-
-                                {/* Auth Overlay for Batch Tab */}
-                                {!isAuthenticated && !isLoading && (
-                                    <div
-                                        className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer rounded-lg"
-                                        onClick={() => setShowSignInModal(true)}
-                                    >
-                                        <div className="flex items-center justify-center h-full">
-                                            <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
-                                                <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
-                                                    <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                                        <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                                        <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
-                                                    </svg>
-                                                </div>
-                                                <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to use Batch Tester</h3>
-                                                <p className="text-sm text-[var(--foreground-muted)] mb-4">
-                                                    Authentication required to run batch tests and save results.
-                                                </p>
-                                                <button className="btn-primary px-6 py-2.5 text-sm font-medium">
-                                                    Click to sign in
-                                                </button>
-                                            </div>
-                                        </div>
-                                    </div>
-                                )}
+                                <button
+                                    onClick={() => signIn('google')}
+                                    className="w-full flex items-center justify-center gap-3 px-6 py-3.5 text-base font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-xl transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                                >
+                                    <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
+                                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
+                                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
+                                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
+                                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
+                                    </svg>
+                                    Sign in with Google
+                                </button>
                             </div>
                         </div>
+                    )}
 
-                        {/* Logs View */}
-                        <div className={`w-full relative ${currentView === 'logs' ? '' : 'hidden'}`}>
-                            <header className="mb-8">
-                                <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">System Logs</h1>
-                                <p className="text-sm text-[var(--foreground-muted)]">View real-time backend and application logs</p>
-                            </header>
+                    {/* Evaluator View */}
+                    <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
+                        <RedGuardIntro />
 
-                            <div className="space-y-8">
+
+                        {/* Tab Headers */}
+                        <div className="border-b border-[var(--border)] mb-6">
+                            <nav className="-mb-px flex space-x-8" aria-label="Tabs">
+                                <button
+                                    onClick={() => setActiveTab('live')}
+                                    className={`${activeTab === 'live'
+                                        ? 'border-[var(--primary-500)] text-[var(--primary-600)]'
+                                        : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
+                                        } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                                >
+                                    Live Verification Console
+                                </button>
+                                <button
+                                    onClick={() => setActiveTab('batch')}
+                                    className={`${activeTab === 'batch'
+                                        ? 'border-[var(--primary-500)] text-[var(--primary-600)]'
+                                        : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
+                                        } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
+                                >
+                                    Batch Tester (CSV)
+                                </button>
+                            </nav>
+                        </div>
+
+                        {/* Live Tab Content */}
+                        <div className={activeTab === 'live' ? '' : 'hidden'}>
+                            <div className="space-y-6">
+                                {/* Row 1: Bot Config & Chat Console */}
                                 <div>
-                                    <h2 className="text-lg font-medium text-[var(--foreground)] mb-4">Application Logs</h2>
-                                    <LogViewer />
+                                    <div className="mb-3">
+                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Setup Connection</h3>
+                                        <p className="text-xs text-[var(--foreground-muted)]">Connect your bot, chat to test responses, and generate adversarial attacks.</p>
+                                    </div>
+                                    <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
+                                        <div className="col-span-4 h-full min-h-0">
+                                            <BotSettings
+                                                onConfigChange={setBotConfig}
+                                                onConnect={handleBotConnect}
+                                                onSessionReset={handleSessionReset}
+                                                onClearConsole={handleClearConsole}
+                                                onKoreSessionUpdate={setKoreSessionId}
+                                                onConnectingChange={setIsConnecting}
+                                                userId={userId}
+                                                isAuthenticated={isAuthenticated}
+                                                onAuthRequired={() => setShowSignInModal(true)}
+                                            />
+                                        </div>
+                                        <div className="col-span-8 h-full min-h-0">
+                                            <ChatConsole
+                                                config={fullGuardrailConfig}
+                                                botConfig={botConfig}
+                                                onInteractionUpdate={handleInteractionUpdate}
+                                                messages={messages}
+                                                setMessages={setMessages}
+                                                userId={userId}
+                                                koreSessionId={koreSessionId}
+                                                onSessionReset={handleSessionReset}
+                                                onBotResponse={handleBotResponse}
+                                                onKoreSessionUpdate={setKoreSessionId}
+                                                isAuthenticated={isAuthenticated}
+                                                onAuthRequired={() => setShowSignInModal(true)}
+                                                isConnecting={isConnecting}
+                                                isConnected={isConnected}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 2: Guardrail Config & Kore Logs */}
+                                <div>
+                                    <div className="mb-3 mt-2">
+                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Define guardrails</h3>
+                                        <p className="text-xs text-[var(--foreground-muted)]">Set your safety policies and inspect real-time system logs.</p>
+                                    </div>
+                                    <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
+                                        <div className="col-span-4 h-full min-h-0">
+                                            <GuardrailSettings
+                                                onConfigChange={setGuardrailPolicy}
+                                                onBotConfigUpdate={setBotConfig}
+                                                botConfig={botConfig}
+                                            />
+                                        </div>
+                                        <div className="col-span-8 h-full min-h-0">
+                                            <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 3: Evaluation Settings & Inspector */}
+                                <div>
+                                    <div className="mb-3 mt-2">
+                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Test & Evaluate</h3>
+                                        <p className="text-xs text-[var(--foreground-muted)]">Use predefined guardrail prompts or create custom ones, run evaluations, and analyze results.</p>
+                                    </div>
+                                    <div className="grid grid-cols-12 gap-6">
+                                        <div className="col-span-4">
+                                            <EvaluationSettings onConfigChange={setLlmConfig} />
+                                        </div>
+                                        <div className="col-span-8">
+                                            <EvaluationInspector
+                                                provider={llmConfig?.provider}
+                                                prompt={previewPrompt}
+                                                rawResponse={evalRawResponse}
+                                                result={evalResult}
+                                                previewPayload={previewPayload}
+                                                hyperparams={hyperparams}
+                                                onHyperparamsChange={setHyperparams}
+                                                onPromptChange={setPreviewPrompt}
+                                                onRequestPayloadRegen={handleRequestPayloadRegen}
+                                                onPayloadChange={setPreviewPayload}
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Row 4: Evaluate Button */}
+                                <div className="relative">
+                                    <div className="flex justify-center mb-2 mt-4">
+                                        <div
+                                            className="relative inline-block"
+                                            onMouseEnter={() => !canRunEvaluation() && setShowTooltip(true)}
+                                            onMouseLeave={() => setShowTooltip(false)}
+                                        >
+                                            <button
+                                                onClick={handleEvaluateClick}
+                                                disabled={isEvaluating || !canRunEvaluation()}
+                                                className="px-6 py-3 text-sm font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-lg shadow-md hover:shadow-lg transform transition-all hover:-translate-y-0.5 disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none disabled:shadow-none disabled:bg-gray-400"
+                                            >
+                                                {isEvaluating ? (
+                                                    <span className="flex items-center justify-center gap-2">
+                                                        <svg className="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                                        </svg>
+                                                        Running Evaluation...
+                                                    </span>
+                                                ) : (
+                                                    'Perform Guardrail Evaluation'
+                                                )}
+                                            </button>
+
+                                            {/* Hover Tooltip */}
+                                            {showTooltip && !canRunEvaluation() && (
+                                                <div className="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 z-50 pointer-events-none">
+                                                    <div className="bg-gray-900 text-white text-xs rounded-lg shadow-xl p-3 max-w-xs whitespace-nowrap">
+                                                        <div className="font-semibold mb-2">Missing Requirements:</div>
+                                                        <ul className="space-y-1 text-left">
+                                                            {getMissingRequirements().map((req, i) => {
+                                                                // Extract just the first part before the dash for tooltip
+                                                                const shortReq = req.split(' - ')[0];
+                                                                return (
+                                                                    <li key={i} className="flex items-start gap-2">
+                                                                        <span>•</span>
+                                                                        <span>{shortReq}</span>
+                                                                    </li>
+                                                                );
+                                                            })}
+                                                        </ul>
+                                                        {/* Tooltip arrow */}
+                                                        <div className="absolute top-full left-1/2 transform -translate-x-1/2 -mt-px">
+                                                            <div className="border-8 border-transparent border-t-gray-900"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    {/* Requirements Modal */}
+                                    {showRequirementsModal && (
+                                        <div className="absolute top-0 left-1/2 transform -translate-x-1/2 -translate-y-full mb-4 z-50">
+                                            <div className="bg-error-bg border-2 border-error-border rounded-lg shadow-xl p-6 max-w-2xl">
+                                                <div className="flex items-start justify-between mb-4">
+                                                    <div className="flex items-center gap-2">
+                                                        <svg className="w-6 h-6 text-error-text shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+                                                        </svg>
+                                                        <h3 className="text-lg font-semibold text-error-text">Cannot Perform Evaluation</h3>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => setShowRequirementsModal(false)}
+                                                        className="text-error-text hover:text-error-text/80 transition-colors"
+                                                    >
+                                                        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                                        </svg>
+                                                    </button>
+                                                </div>
+                                                <div className="space-y-3">
+                                                    <p className="text-sm text-error-text font-medium mb-3">Please complete the following requirements:</p>
+                                                    {missingRequirements.map((item, i) => (
+                                                        <div key={i} className="flex gap-3 text-sm">
+                                                            <span className="text-error-text font-bold shrink-0">{i + 1}.</span>
+                                                            <p className="text-error-text">{item}</p>
+                                                        </div>
+                                                    ))}
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+
+                                {/* Row 5: History */}
+                                <div className="mt-8">
+                                    <RunHistory key={runHistoryKey} botId={botConfig?.botId} />
                                 </div>
                             </div>
+                        </div>
 
-                            {/* Auth Overlay for Logs View */}
+                        {/* Batch Tab Content */}
+                        <div className={activeTab === 'batch' ? 'relative' : 'hidden'}>
+                            <BatchTester
+                                botConfig={botConfig}
+                                guardrailConfig={fullGuardrailConfig}
+                            />
+
+                            {/* Auth Overlay for Batch Tab */}
                             {!isAuthenticated && !isLoading && (
                                 <div
-                                    className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer"
+                                    className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer rounded-lg"
                                     onClick={() => setShowSignInModal(true)}
-                                    style={{ top: '120px' }} // Positioned below header
                                 >
-                                    <div className="flex items-start justify-center pt-12">
+                                    <div className="flex items-center justify-center h-full">
                                         <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
                                             <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
                                                 <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
-                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4"/>
+                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
                                                 </svg>
                                             </div>
-                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to view logs</h3>
+                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to use Batch Tester</h3>
                                             <p className="text-sm text-[var(--foreground-muted)] mb-4">
-                                                Authentication required to access system logs and diagnostic information.
+                                                Authentication required to run batch tests and save results.
                                             </p>
                                             <button className="btn-primary px-6 py-2.5 text-sm font-medium">
                                                 Click to sign in
@@ -793,8 +748,51 @@ function HomeContent() {
                                 </div>
                             )}
                         </div>
-                    </main>
-                </div>
+                    </div>
+
+                    {/* Logs View */}
+                    <div className={`w-full relative ${currentView === 'logs' ? '' : 'hidden'}`}>
+                        <header className="mb-8">
+                            <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">System Logs</h1>
+                            <p className="text-sm text-[var(--foreground-muted)]">View real-time backend and application logs</p>
+                        </header>
+
+                        <div className="space-y-8">
+                            <div>
+                                <h2 className="text-lg font-medium text-[var(--foreground)] mb-4">Application Logs</h2>
+                                <LogViewer />
+                            </div>
+                        </div>
+
+                        {/* Auth Overlay for Logs View */}
+                        {!isAuthenticated && !isLoading && (
+                            <div
+                                className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer"
+                                onClick={() => setShowSignInModal(true)}
+                                style={{ top: '120px' }} // Positioned below header
+                            >
+                                <div className="flex items-start justify-center pt-12">
+                                    <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
+                                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
+                                            <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
+                                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+                                            </svg>
+                                        </div>
+                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to view logs</h3>
+                                        <p className="text-sm text-[var(--foreground-muted)] mb-4">
+                                            Authentication required to access system logs and diagnostic information.
+                                        </p>
+                                        <button className="btn-primary px-6 py-2.5 text-sm font-medium">
+                                            Click to sign in
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                </main>
+            </div>
         </div>
     );
 }

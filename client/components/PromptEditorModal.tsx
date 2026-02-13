@@ -196,10 +196,10 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                     <button
                         onClick={handleUndo}
                         disabled={historyIndex <= 0}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         title="Undo (Cmd/Ctrl+Z)"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 10h10a8 8 0 018 8v2M3 10l6 6m-6-6l6-6" />
                         </svg>
                         Undo
@@ -207,10 +207,10 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                     <button
                         onClick={handleRedo}
                         disabled={historyIndex >= history.length - 1}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 rounded-md border border-gray-300 hover:bg-gray-100 disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
                         title="Redo (Cmd/Ctrl+Shift+Z)"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 10h-10a8 8 0 00-8 8v2M21 10l-6 6m6-6l-6-6" />
                         </svg>
                         Redo
@@ -220,20 +220,20 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
 
                     <button
                         onClick={handleSave}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
                         title="Save to file (Cmd/Ctrl+S)"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
                         </svg>
                         Save
                     </button>
                     <button
                         onClick={handleLoad}
-                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
+                        className="flex items-center gap-1.5 px-3 py-1.5 text-sm text-gray-700 rounded-md border border-gray-300 hover:bg-gray-100 transition-colors"
                         title="Load from file"
                     >
-                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <svg className="w-4 h-4 text-gray-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
                         Load
@@ -261,7 +261,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                     {onSaveToBackend && (
                         <button
                             onClick={() => setIsSavingToBackend(true)}
-                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-indigo-600 text-white hover:bg-indigo-700 transition-colors shadow-sm"
+                            className="flex items-center gap-1.5 px-3 py-1.5 text-sm rounded-md bg-[var(--primary-500)] text-white hover:bg-[var(--primary-600)] transition-colors shadow-sm"
                             title="Save as a new template to the backend"
                         >
                             <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -304,7 +304,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                         <div className="flex gap-2">
                             <button
                                 onClick={handleBackendSave}
-                                className="px-4 py-1.5 bg-indigo-600 text-white text-sm rounded-md hover:bg-indigo-700 shadow-sm font-medium transition-colors"
+                                className="px-4 py-1.5 bg-[var(--primary-500)] text-white text-sm rounded-md hover:bg-[var(--primary-600)] shadow-sm font-medium transition-colors"
                             >
                                 Confirm Save
                             </button>
