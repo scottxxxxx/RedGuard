@@ -5,6 +5,34 @@ RedGuard uses GitHub Actions to automatically deploy to Google Cloud Platform (G
 
 ---
 
+### Firewall Configuration
+
+Ensure your GCP project allows HTTP/HTTPS traffic.
+
+```bash
+# Allow HTTP (Port 80)
+gcloud compute firewall-rules create allow-http \
+  --direction=INGRESS \
+  --priority=1000 \
+  --network=default \
+  --action=ALLOW \
+  --rules=tcp:80 \
+  --source-ranges=0.0.0.0/0 \
+  --target-tags=http-server
+
+# Allow HTTPS (Port 443)
+gcloud compute firewall-rules create allow-https \
+  --direction=INGRESS \
+  --priority=1000 \
+  --network=default \
+  --action=ALLOW \
+  --rules=tcp:443 \
+  --source-ranges=0.0.0.0/0 \
+  --target-tags=https-server
+```
+
+---
+
 ## Quick Start
 
 ### To Deploy to Production:
