@@ -11,7 +11,8 @@ env:
   GAR_LOCATION: us-central1
   SERVICE: redguard-server
   REGION: us-central1
-  API_URL: http://***REMOVED_IP***:3001/api
+  # This API_URL is used during build time for the client but overridden at runtime in docker-compose
+  API_URL: https://redguard.scottguida.com:3001/api
 
 jobs:
   deploy:
@@ -59,9 +60,6 @@ jobs:
       # ------------------------------------------------------------------
       # 3. Deploy to GCP Compute Engine via SSH
       # ------------------------------------------------------------------
-      # ------------------------------------------------------------------
-      # 3. Deploy to GCP Compute Engine via SSH
-      # ------------------------------------------------------------------
       - name: Deploy via SSH
         uses: appleboy/ssh-action@v1.0.3
         with:
@@ -95,6 +93,17 @@ jobs:
             cat <<EOF | sudo tee docker-compose.prod.yml > /dev/null
             version: '3.8'
             services:
+              caddy:
+                image: caddy:2-alpine
+                restart: unless-stopped
+                ports:
+                  - "80:80"
+                  - "443:443"
+                volumes:
+                  - caddy_data:/data
+                  - caddy_config:/config
+                command: caddy reverse-proxy --from redguard.scottguida.com --to client:3000
+              
               server:
                 image: ghcr.io/${{ env.REPO_LC }}/server:latest
                 ports:
@@ -109,13 +118,13 @@ jobs:
               
               client:
                 image: ghcr.io/${{ env.REPO_LC }}/client:latest
-                ports:
-                  - "80:3000"
+                expose:
+                  - "3000"
                 environment:
                   - NODE_ENV=production
-                  - NEXT_PUBLIC_API_URL=${{ env.API_URL }}
+                  - NEXT_PUBLIC_API_URL=https://redguard.scottguida.com:3001/api 
                   - NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
-                  - NEXTAUTH_URL=${{ secrets.NEXTAUTH_URL }}
+                  - NEXTAUTH_URL=https://redguard.scottguida.com
                   - GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
                   - GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
                 depends_on:
@@ -123,6 +132,8 @@ jobs:
 
             volumes:
               redguard_data:
+              caddy_data:
+              caddy_config:
             EOF
 
             # Prune aggressively to free up space (system + volumes)
