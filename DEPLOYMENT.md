@@ -57,6 +57,14 @@ gcloud compute instances list --filter="name=redguard-server"
 - Docker containers automatically restart when the VM boots up
 - Your data persists in the `redguard_data` volume
 
+### Via Google Cloud Console (GUI)
+
+1. Go to **Compute Engine** → **VM instances**:
+   https://console.cloud.google.com/compute/instances
+2. Click the **three dots** (⋮) next to `redguard-server`.
+3. Select **Start / Resume** or **Stop**.
+4. **Graceful Shutdown**: Clicking "Stop" in the console sends the same safe shutdown signal as the command line. It shuts down Docker containers and the OS gracefully before powering off.
+
 ### Check VM Status Anytime
 ```bash
 gcloud compute instances describe redguard-server --zone=us-central1-a --format="value(status)"
