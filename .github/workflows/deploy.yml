@@ -12,7 +12,7 @@ env:
   SERVICE: redguard-server
   REGION: us-central1
   # This API_URL is used during build time for the client but overridden at runtime in docker-compose
-  API_URL: https://redguard.scottguida.com:3001/api
+  API_URL: https://redguard.scottguida.com/api
 
 jobs:
   deploy:
@@ -102,12 +102,20 @@ jobs:
                 volumes:
                   - caddy_data:/data
                   - caddy_config:/config
-                command: caddy reverse-proxy --from redguard.scottguida.com --to client:3000
-              
+                # Use a Caddyfile for more complex routing (API vs Client)
+                entrypoint: ["/bin/sh", "-c"]
+                command: 
+                  - |
+                    echo "redguard.scottguida.com {
+                      reverse_proxy /api/* server:3001
+                      reverse_proxy * client:3000
+                    }" > /etc/caddy/Caddyfile
+                    caddy run --config /etc/caddy/Caddyfile
+
               server:
                 image: ghcr.io/${{ env.REPO_LC }}/server:latest
-                ports:
-                  - "3001:3001"
+                expose:
+                  - "3001"
                 environment:
                   - NODE_ENV=production
                   - PORT=3001
@@ -122,7 +130,7 @@ jobs:
                   - "3000"
                 environment:
                   - NODE_ENV=production
-                  - NEXT_PUBLIC_API_URL=https://redguard.scottguida.com:3001/api 
+                  - NEXT_PUBLIC_API_URL=https://redguard.scottguida.com/api
                   - NEXTAUTH_SECRET=${{ secrets.NEXTAUTH_SECRET }}
                   - NEXTAUTH_URL=https://redguard.scottguida.com
                   - GOOGLE_CLIENT_ID=${{ secrets.GOOGLE_CLIENT_ID }}
