@@ -76,8 +76,8 @@ jobs:
             echo "Starting pre-deployment cleanup..."
             # Stop all running containers (ignore errors if none running)
             sudo docker stop $(sudo docker ps -aq) 2>/dev/null || true
-            # Remove all containers
-            sudo docker rm $(sudo docker ps -aq) 2>/dev/null || true
+            # FORCE Remove all containers (fixes "container name already in use" errors)
+            sudo docker rm -f $(sudo docker ps -aq) 2>/dev/null || true
             # Prune everything (images, volumes, networks)
             sudo docker system prune -af --volumes
             echo "Cleanup complete. Disk Usage:"
