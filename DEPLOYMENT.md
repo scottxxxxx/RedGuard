@@ -72,14 +72,30 @@ gcloud compute instances describe redguard-server --zone=us-central1-a --format=
 
 ---
 
+## SSL & Domain Configuration
+
+We use **Caddy** as a reverse proxy to automatically handle SSL certificates and direct traffic.
+
+- **Domain**: `redguard.scottguida.com`
+- **SSL Provider**: Let's Encrypt (Automatic via Caddy)
+- **Configuration**: Caddy listens on ports 80/443 and proxies to the internal client app.
+
+### How it Works
+1. **Caddy Container**: Runs alongside your app, handling all incoming web traffic.
+2. **Auto-HTTPS**: Automatically requests and renews SSL certificates for your domain.
+3. **Reverse Proxy**: Forwards secure traffic to the client container on port 3000.
+
+---
+
 ## Architecture
 
 - **Source Control**: GitHub
 - **Container Registry**: GitHub Container Registry (GHCR)
 - **Production Server**: GCP Compute Engine VM @ ***REMOVED_IP***
-- **Deployment Method**: SSH-based Docker Compose
-- **Client Port**: 80 (standard HTTP, no port needed in URL)
-- **Server Port**: 3001
+- **Domain**: `https://redguard.scottguida.com`
+- **SSL/Proxy**: Caddy (Ports 80 & 443)
+- **Client**: Internal Port 3000 (Protected behind Caddy)
+- **Server**: Port 3001 (Direct API access, separate SSL if needed)
 
 ---
 
