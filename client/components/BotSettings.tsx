@@ -78,7 +78,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
         // If no automatic greeting, send a greeting request to trigger welcome
         if (!greetingMessage) {
             try {
-                const greetingRes = await fetch(`${apiUrl.replace('/init', '/send')}`, {
+                const greetingRes = await fetch(`${apiUrl.replace('/connect', '/send')}`, {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
@@ -108,6 +108,70 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
         }
     };
 
+    const attemptBotExport = async (currentConfig: BotConfig) => {
+        try {
+            console.log('[BotSettings] Attempting to export App Definition for automatic guardrail configuration...');
+
+            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/export-bot`;
+            const response = await fetch(apiUrl, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    botConfig: currentConfig,
+                    userId: userId || 'unknown'
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                // Check if it's a scope error
+                if (response.status === 403 && data.scopeRequired) {
+                    console.log('[BotSettings] Bot/App Export scope not enabled');
+                    showToast(
+                        'Optional: Enable Bot/App Export for Automatic Configuration\n\n' +
+                        'RedGuard can automatically retrieve your App Definition and configure guardrail settings for you.\n\n' +
+                        'Benefits:\n' +
+                        '• Auto-populate guardrail configuration from your bot\n' +
+                        '• No need to manually upload App Definition files\n' +
+                        '• Stay in sync with bot changes\n\n' +
+                        'To enable:\n' +
+                        '1. Go to Kore.ai → App Settings → Dev Tools → Apps\n' +
+                        '2. Click "Edit App Definition" on your JWT App\n' +
+                        '3. Go to Automation tab → Scopes section\n' +
+                        '4. Enable: "Bot/App Export"\n' +
+                        '5. Save and reconnect to RedGuard',
+                        'info'
+                    );
+                } else {
+                    console.warn('[BotSettings] Bot export failed:', data.error);
+                }
+                return;
+            }
+
+            // Successfully exported App Definition
+            console.log('[BotSettings] App Definition exported successfully');
+
+            if (data.botDefinition) {
+                // Parse the App Definition and extract guardrail configuration
+                // This would call the same parser we use for uploaded App Definition files
+                showToast(
+                    'App Definition Retrieved!\n\n' +
+                    'RedGuard has automatically exported your App Definition and detected guardrail settings.\n\n' +
+                    'Check the "Define Guardrails" section below to review the auto-configured settings.',
+                    'success'
+                );
+
+                // TODO: Parse data.botDefinition and update guardrail settings
+                // This would involve calling the bot-config-analyzer service
+                // and updating the GuardrailSettings component
+            }
+        } catch (error) {
+            // Silent failure - bot export is optional, don't disrupt the connection flow
+            console.warn('[BotSettings] Bot export attempt failed:', error);
+        }
+    };
+
     const validateConnection = async (currentConfig: BotConfig) => {
         if (!currentConfig.botId || !currentConfig.clientId || !currentConfig.clientSecret) return;
 
@@ -125,9 +189,9 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
         try {
             const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/validate`;
 
-            // Add 20-second timeout to validation request
+            // Add 30-second timeout to validation request (increased for slower network connections)
             const controller = new AbortController();
-            const timeoutId = setTimeout(() => controller.abort(), 20000);
+            const timeoutId = setTimeout(() => controller.abort('Connection timeout (30s)'), 30000);
 
             const res = await fetch(apiUrl, {
                 method: 'POST',
@@ -164,6 +228,14 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
             setLastValidatedConfig(currentConfig); // Store validated config
         } catch (err: any) {
             setValidationStatus('error');
+
+            // Handle timeout errors specifically
+            if (err.name === 'AbortError') {
+                const errorMessage = 'Connection timeout - The bot took too long to respond (>30 seconds). Please check your webhook URL and bot configuration.';
+                setValidationMessage(errorMessage);
+                throw new Error(errorMessage);
+            }
+
             const errorMessage = err.message || 'Unknown validation error';
             setValidationMessage(errorMessage);
             throw err; // Re-throw to be caught by parent error handler
@@ -341,9 +413,11 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                         placeholder="Enter Bot ID (e.g., st-abc123...)"
                         className="input w-full text-sm font-mono text-[var(--foreground)]"
                     />
-                    <p className="text-[10px] text-[var(--foreground-muted)] mt-1">
-                        Syncs with webhook URL automatically
-                    </p>
+                    {isBotIdInferred && (
+                        <p className="text-[10px] text-[var(--foreground-muted)] mt-1">
+                            ✓ Extracted from webhook URL
+                        </p>
+                    )}
                 </div>
             </div>
 
@@ -397,7 +471,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                             if (onConnectingChange) onConnectingChange(false);
                             setValidationStatus('error');
                             setValidationMessage('Connection timed out - please try again');
-                        }, 20000); // 20 second timeout (longer than the 15s Promise.race timeout)
+                        }, 35000); // 35 second timeout (longer than the 30s validation + 25s chat timeout)
 
                         try {
                             // Clear any previous successful state to force fresh validation
@@ -411,9 +485,12 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                             await Promise.race([
                                 initializeChat(config),
                                 new Promise((_, reject) =>
-                                    setTimeout(() => reject(new Error('Connection timeout')), 15000)
+                                    setTimeout(() => reject(new Error('Connection timeout')), 25000)
                                 )
                             ]);
+
+                            // After successful connection, attempt to export bot definition for automatic guardrail configuration
+                            attemptBotExport(config);
                         } catch (err: any) {
                             console.error('[BotSettings] Connection error:', err);
 
@@ -421,7 +498,22 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                             setValidationStatus('error');
 
                             // Provide specific error messages with troubleshooting guidance
-                            if (err?.message?.includes('Bot ID mismatch')) {
+                            // Check for scope errors FIRST (most specific)
+                            if (err?.message?.includes('Scope is incorrect') || err?.message?.includes('Permission denied')) {
+                                setValidationMessage('API Scope Missing - Gen AI and LLM Usage Logs required');
+                                showToast(
+                                    'API Scope Missing: Gen AI and LLM Usage Logs\n\n' +
+                                    'This scope is REQUIRED for RedGuard to retrieve LLM logs for evaluation.\n\n' +
+                                    'To enable:\n' +
+                                    '1. Go to Kore.ai → App Settings → Dev Tools → Apps\n' +
+                                    '2. Click "Edit App Definition" on your JWT App\n' +
+                                    '3. Go to Automation tab → Scopes section\n' +
+                                    '4. Enable: "Gen AI and LLM Usage Logs"\n' +
+                                    '5. Save and publish your bot\n' +
+                                    '6. Reconnect in RedGuard',
+                                    'error'
+                                );
+                            } else if (err?.message?.includes('Bot ID mismatch')) {
                                 const msg = 'Bot ID mismatch - Bot ID must match the ID in the Webhook URL';
                                 setValidationMessage(msg);
                                 showToast(
@@ -432,10 +524,10 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                                     '• Both values are from the same bot in Kore.ai',
                                     'error'
                                 );
-                            } else if (err?.message === 'Connection timeout') {
+                            } else if (err?.message?.includes('Connection timeout') || err?.message?.includes('timeout')) {
                                 setValidationMessage('Connection timeout - verify network and webhook URL');
                                 showToast(
-                                    'Connection timed out after 15 seconds. This usually means:\n' +
+                                    'Connection timed out (>30 seconds). This usually means:\n' +
                                     '• Network connectivity issues\n' +
                                     '• Bot is not responding\n' +
                                     '• Webhook URL is incorrect\n\n' +

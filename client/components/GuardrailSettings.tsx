@@ -1,6 +1,33 @@
 "use client";
 import { useState, useEffect } from 'react';
 
+// Custom Dialog Component
+const InfoDialog = ({ isOpen, onClose, title, message }: { isOpen: boolean; onClose: () => void; title: string; message: string }) => {
+    if (!isOpen) return null;
+
+    return (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={onClose}>
+            <div
+                className="bg-[var(--surface)] border border-[var(--border)] rounded-lg shadow-xl max-w-md w-full mx-4 p-6"
+                onClick={(e) => e.stopPropagation()}
+            >
+                <h3 className="text-lg font-semibold text-[var(--foreground)] mb-3">{title}</h3>
+                <div className="text-sm text-[var(--foreground-muted)] whitespace-pre-line mb-6">
+                    {message}
+                </div>
+                <div className="flex justify-end">
+                    <button
+                        onClick={onClose}
+                        className="px-4 py-2 bg-[var(--primary-500)] hover:bg-[var(--primary-600)] text-white rounded-md font-medium transition-colors"
+                    >
+                        OK
+                    </button>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 // Refactored to exclude LLM Config (now handled by EvaluationSettings)
 export type GuardrailPolicy = {
     activeGuardrails: string[];
@@ -11,6 +38,7 @@ export type GuardrailPolicy = {
 interface Props {
     onConfigChange: (config: GuardrailPolicy) => void;
     onBotConfigUpdate?: (config: any) => void;
+    botConfig?: any; // Bot connection config for exporting App Definition
 }
 
 const FeatureInfoButton = ({ text, features }: { text?: string, features?: string[] }) => {
@@ -65,7 +93,7 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
     );
 };
 
-export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate }: Props) {
+export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, botConfig }: Props) {
     const [toggles, setToggles] = useState({
         toxicity_input: true,
         toxicity_output: true,
@@ -76,6 +104,16 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate }:
     });
     const [bannedTopics, setBannedTopics] = useState("politics, violence, competitors");
     const [regexPatterns, setRegexPatterns] = useState("");
+
+    const [dialog, setDialog] = useState<{ isOpen: boolean; title: string; message: string }>({
+        isOpen: false,
+        title: '',
+        message: ''
+    });
+
+    const showDialog = (title: string, message: string) => {
+        setDialog({ isOpen: true, title, message });
+    };
 
     const [descriptions, setDescriptions] = useState<Record<string, string>>({
         'toxicity': "Prevent the dissemination of potentially harmful prompts and responses by analysing the toxicity of the text.",
@@ -236,12 +274,12 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate }:
                     <button
                         onClick={() => document.getElementById('config-upload')?.click()}
                         className="text-xs flex items-center gap-1 text-[var(--primary-600)] hover:text-[var(--primary-700)] font-medium bg-[var(--primary-50)] hover:bg-[var(--primary-100)] px-2 py-1 rounded transition-colors"
-                        title="Examine an app definition file to see which guardrail settings are enabled."
+                        title="Upload an App Definition file to import guardrail settings."
                     >
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-8l-4-4m0 0L8 8m4-4v12" />
                         </svg>
-                        Get Configuration from App Definition
+                        <span className="leading-tight text-center">Import&nbsp;App<br />Definition&nbsp;File</span>
                     </button>
                 </div>
             </div>
@@ -339,6 +377,13 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate }:
                     )}
                 </div>
             </div>
+
+            <InfoDialog
+                isOpen={dialog.isOpen}
+                onClose={() => setDialog({ ...dialog, isOpen: false })}
+                title={dialog.title}
+                message={dialog.message}
+            />
         </div>
     );
 }
