@@ -1,18 +1,15 @@
-# Use Debian-based image for better Python/ML support (Garak needs this)
-FROM node:22-bullseye-slim
+# Use Debian-based image for better Python/ML support
+FROM node:20-bullseye-slim
 
 WORKDIR /app
 
-# Install Python 3 and build tools
-RUN apt-get update && apt-get install -y \
+# Install Python 3 and basic build tools
+# Removed rustc/cargo as they are huge, prone to failure, and not needed for basic scripts
+RUN apt-get update --fix-missing && apt-get install -y \
     python3 \
     python3-pip \
     git \
     build-essential \
-    rustc \
-    cargo \
-    pkg-config \
-    libssl-dev \
     && rm -rf /var/lib/apt/lists/*
 
 # Install Garak and dependencies
