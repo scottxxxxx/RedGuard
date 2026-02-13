@@ -481,24 +481,32 @@ If GitHub Actions SSH fails, use the GCP Console's browser SSH (bypasses key iss
    ```
 
 **Long-term Fix - Regenerate SSH Keys:**
-```bash
-# 1. Generate new SSH key pair
-ssh-keygen -t ed25519 -C "github-actions-redguard" -f ~/.ssh/redguard-deploy
-# Press Enter twice (no passphrase for automation)
 
-# 2. Add public key to GCP VM
-gcloud compute instances add-metadata redguard-server \
-  --zone=us-central1-a \
-  --metadata ssh-keys="github-actions:$(cat ~/.ssh/redguard-deploy.pub)"
+If you encounter `ssh: handshake failed: ssh: unable to authenticate`, the key in GitHub Secrets likely doesn't match the VM's authorized keys.
 
-# 3. Update GitHub Secret
-cat ~/.ssh/redguard-deploy
-# Copy the private key and update GCP_SSH_KEY secret at:
-# https://github.com/scottguida/redguard/settings/secrets/actions
+1. **Generate a new key pair (no passphrase):**
+   ```bash
+   ssh-keygen -t ed25519 -C "github-actions" -f keys/deploy_key -N ""
+   ```
 
-# 4. Test connection
-ssh -i ~/.ssh/redguard-deploy github-actions@***REMOVED_IP***
-```
+2. **Authorize the key on the VM:**
+   ```bash
+   # Add the PUBLIC key to the VM's metadata for user 'github-actions'
+   gcloud compute instances add-metadata redguard-server \
+     --zone=us-central1-a \
+     --metadata ssh-keys="github-actions:$(cat keys/deploy_key.pub)"
+   ```
+
+3. **Update GitHub Secrets:**
+   Go to **Settings** → **Secrets and variables** → **Actions** and update:
+   - `GCP_USERNAME`: Set to `github-actions`
+   - `GCP_SSH_KEY`: Paste the entire content of `keys/deploy_key` (Private Key)
+   - `GCP_SSH_PASSPHRASE`: **Delete** this secret or make it empty (new key has no password)
+
+4. **Test Connection (Optional):**
+   ```bash
+   ssh -i keys/deploy_key github-actions@***REMOVED_IP***
+   ```
 
 **Wait After VM Start:**
 If you just started the VM, wait 2-3 minutes before deploying:
