@@ -96,7 +96,9 @@ We follow **Semantic Versioning** (MAJOR.MINOR.PATCH):
 1. **Code Push** → Push to `main` branch triggers GitHub Actions
 2. **Build Phase** → Docker images built for client and server
 3. **Push to Registry** → Images pushed to GitHub Container Registry (GHCR)
-4. **Deploy Phase** → SSH into GCP VM, pull images, restart services
+4. **Deploy Phase** → SSH into GCP VM:
+   - **Step 0: Aggressive Cleanup** → Stops containers and prunes ALL unused images/volumes to free space
+   - **Step 1: Pull & Restart** → Pulls new images and restarts services
 5. **Verification** → Services automatically restart with new version
 
 ### Workflow File
@@ -120,6 +122,7 @@ Configure in **GitHub → Settings → Secrets and variables → Actions**:
 | `GCP_HOST` | GCP VM IP address | `***REMOVED_IP***` |
 | `GCP_USERNAME` | SSH username | Your GCP VM username |
 | `GCP_SSH_KEY` | Private SSH key | Must match public key on VM |
+| `GCP_SSH_PASSPHRASE` | SSH Key Passphrase | Required if key has a passphrase |
 | `GITHUB_TOKEN` | Auto-provided by GitHub | No setup needed |
 
 ### 2. GCP VM Requirements
@@ -241,17 +244,20 @@ sudo docker ps
 
 ## Critical: Disk Space Management
 
-**⚠️ IMPORTANT**: The GCP VM has limited disk space. Docker images can quickly fill storage, causing deployments to fail with `no space left on device`.
+**⚠️ IMPORTANT**: The GCP VM has limited disk space (20-30GB). To prevent "no space left on device" errors, we must aggressively clean up Docker artifacts *before* pulling new images.
 
 ### Automatic Cleanup (Built-in)
 
-The deployment workflow includes automatic cleanup:
-```yaml
-# Prune old images to free up space
-sudo docker system prune -af
+The deployment workflow now includes an **Aggressive Cleanup Step** that runs first:
+```bash
+# Stops all containers
+# Removes all containers
+# Prunes ALL images, networks, and build cache
+# Prunes unused volumes (EXCEPT critical data in named volumes)
+sudo docker system prune -af --volumes
 ```
 
-**Do not remove this step** from `.github/workflows/deploy.yml`. It is essential for deployment stability.
+**Do not remove this step** from `.github/workflows/deploy.yml`. It is essential for deployment succeess.
 
 ### Manual Cleanup (If Needed)
 
@@ -259,18 +265,18 @@ sudo docker system prune -af
 # SSH into VM
 ssh your-username@***REMOVED_IP***
 
+# 1. Stop all containers
+sudo docker stop $(sudo docker ps -aq)
+
+# 2. Remove all containers
+sudo docker rm $(sudo docker ps -aq)
+
+# 3. Clean up EVERYTHING (images, networks, build cache, volumes)
+# WARNING: Only safe because we use a named volume 'redguard_data' for the DB
+sudo docker system prune -af --volumes
+
 # Check disk usage
 df -h
-
-# Clean up Docker system
-sudo docker system prune -af
-
-# Remove unused volumes (CAREFUL - only if safe)
-sudo docker volume prune
-
-# Remove specific old images
-sudo docker images
-sudo docker rmi <image-id>
 ```
 
 ### Monitoring Disk Space
