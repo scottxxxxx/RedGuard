@@ -104,11 +104,78 @@ router.post('/llm-logs', async (req, res) => {
     }
 });
 
-router.post('/validate', async (req, res) => {
-    try {
-        const { botConfig, userId } = req.body;
-        const explicitUserId = userId || 'unknown';
+router.post('/export-bot', async (req, res) => {
+    const startTime = Date.now();
+    const { botConfig, userId } = req.body;
+    const explicitUserId = userId || 'unknown';
 
+    try {
+        if (!botConfig) {
+            return res.status(400).json({ error: "No configuration provided." });
+        }
+
+        console.log(`[Export Bot] Attempting to export App Definition for ${botConfig.botId}...`);
+
+        const botDefinition = await koreApiService.exportBot(botConfig);
+
+        console.log(`[Export Bot] Successfully exported App Definition`);
+
+        // Log successful bot export
+        await apiLogger.log({
+            userId: explicitUserId,
+            logType: 'kore_export_bot',
+            method: 'POST',
+            endpoint: '/api/kore/export-bot',
+            requestBody: { botConfig: { ...botConfig, clientSecret: '[REDACTED]' } },
+            statusCode: 200,
+            responseBody: { exported: true },
+            latencyMs: Date.now() - startTime,
+            isError: false,
+            provider: 'kore'
+        });
+
+        res.json({
+            success: true,
+            botDefinition: botDefinition
+        });
+    } catch (error) {
+        console.error("Bot Export Error:", error.message);
+
+        // Determine if it's a scope/permission error
+        const isScopeError = error.message.includes('Bot Export scope') ||
+                            error.message.includes('Permission denied') ||
+                            error.message.includes('403') ||
+                            error.message.includes('401');
+
+        const statusCode = isScopeError ? 403 : 500;
+
+        // Log failed bot export
+        await apiLogger.log({
+            userId: explicitUserId,
+            logType: 'kore_export_bot',
+            method: 'POST',
+            endpoint: '/api/kore/export-bot',
+            requestBody: { botConfig: botConfig ? { ...botConfig, clientSecret: '[REDACTED]' } : null },
+            statusCode: statusCode,
+            responseBody: { error: error.message },
+            latencyMs: Date.now() - startTime,
+            isError: true,
+            errorMessage: error.message,
+            provider: 'kore'
+        });
+
+        res.status(statusCode).json({
+            error: error.message,
+            scopeRequired: isScopeError
+        });
+    }
+});
+
+router.post('/validate', async (req, res) => {
+    const { botConfig, userId } = req.body;
+    const explicitUserId = userId || 'unknown';
+
+    try {
         if (!botConfig) {
             return res.status(400).json({ error: "No configuration provided." });
         }
