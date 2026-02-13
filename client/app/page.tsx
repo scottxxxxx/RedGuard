@@ -371,7 +371,7 @@ function HomeContent() {
                         isAttack: currentMsg?.isAttack || false,
                         inputTokens,
                         outputTokens,
-                        totalTokens: result.totalTokens ?? interaction.result?.totalTokens ?? null,
+                        totalTokens: result.totalTokens ?? interaction?.result?.totalTokens ?? null,
                         latencyMs: result.latencyMs ?? null,
                         model: result.model ?? null
                     })
