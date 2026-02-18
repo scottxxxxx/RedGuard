@@ -634,6 +634,7 @@ function HomeContent() {
                                                 onConfigChange={setGuardrailPolicy}
                                                 onBotConfigUpdate={setBotConfig}
                                                 botConfig={botConfig}
+                                                isConnected={isConnected}
                                             />
                                         </div>
                                         <div className="col-span-8 h-full min-h-0">

@@ -39,6 +39,7 @@ interface Props {
     onConfigChange: (config: GuardrailPolicy) => void;
     onBotConfigUpdate?: (config: any) => void;
     botConfig?: any; // Bot connection config for exporting App Definition
+    isConnected?: boolean; // Whether bot is actively connected
 }
 
 const FeatureInfoButton = ({ text, features }: { text?: string, features?: string[] }) => {
@@ -93,7 +94,7 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
     );
 };
 
-export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, botConfig }: Props) {
+export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, botConfig, isConnected }: Props) {
     const [toggles, setToggles] = useState({
         toxicity_input: true,
         toxicity_output: true,
@@ -343,9 +344,9 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                     </button>
                     <button
                         onClick={handleFetchFromBot}
-                        disabled={!botConfig?.botId || !botConfig?.clientId || !botConfig?.clientSecret || backupStatus === 'starting' || backupStatus === 'exporting' || backupStatus === 'extracting'}
+                        disabled={!isConnected || backupStatus === 'starting' || backupStatus === 'exporting' || backupStatus === 'extracting'}
                         className="text-xs flex items-center gap-1 text-[var(--primary-600)] hover:text-[var(--primary-700)] font-medium bg-[var(--primary-50)] hover:bg-[var(--primary-100)] px-2 py-1 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                        title={!botConfig?.botId ? "Connect to a bot first" : "Fetch guardrail configuration directly from the bot"}
+                        title={!isConnected ? "Connect to a bot first" : "Fetch guardrail configuration directly from the bot"}
                     >
                         <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
