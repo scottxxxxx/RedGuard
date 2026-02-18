@@ -36,6 +36,7 @@ export default function EvaluationInspector({ provider, model, rawResponse, resu
     const [activeTab, setActiveTab] = useState<'payload' | 'output' | 'full'>('payload');
     const [showHyperparams, setShowHyperparams] = useState(false);
     const [localParams, setLocalParams] = useState<Hyperparams>(hyperparams || DEFAULT_HYPERPARAMS);
+    const [expanded, setExpanded] = useState(false);
 
     // Track previous result to detect genuinely new results
     const prevResultRef = useRef<any>(null);
@@ -67,6 +68,18 @@ export default function EvaluationInspector({ provider, model, rawResponse, resu
     useEffect(() => {
         if (hyperparams) setLocalParams(hyperparams);
     }, [hyperparams]);
+
+    // ESC key handler and body scroll lock for expanded modal
+    useEffect(() => {
+        if (!expanded) return;
+        const handleKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setExpanded(false); };
+        document.addEventListener('keydown', handleKey);
+        document.body.style.overflow = 'hidden';
+        return () => {
+            document.removeEventListener('keydown', handleKey);
+            document.body.style.overflow = '';
+        };
+    }, [expanded]);
 
     // Auto-switch to results tab when a genuinely new result arrives
     useEffect(() => {
@@ -206,39 +219,7 @@ export default function EvaluationInspector({ provider, model, rawResponse, resu
     const showInfoBanner = modelConfig.infoBanner && modelConfig.infoBannerWhen?.(localParams as Record<string, any>);
 
     return (
-        <div className="bg-[var(--surface)] shadow rounded-lg flex flex-col h-[600px]">
-            {verdictInfo && (
-                <div className={`p-4 border-b ${verdictInfo.type === 'pass' ? 'bg-success-bg border-success-border' :
-                    verdictInfo.type === 'warning' ? 'bg-warning-bg border-warning-border' :
-                        verdictInfo.type === 'error' ? 'bg-warning-bg border-warning-border' :
-                            'bg-error-bg border-error-border'
-                    }`}>
-                    <div className="flex items-center gap-2">
-                        <span className="text-xl">
-                            {verdictInfo.type === 'pass' ? '✅' :
-                                verdictInfo.type === 'warning' ? '⚠️' :
-                                    verdictInfo.type === 'error' ? '⚠️' : '❌'}
-                        </span>
-                        <span className={`font-bold ${verdictInfo.type === 'pass' ? 'text-success-text' :
-                            verdictInfo.type === 'warning' ? 'text-warning-text' :
-                                verdictInfo.type === 'error' ? 'text-warning-text' :
-                                    'text-error-text'
-                            }`}>
-                            {verdictInfo.message}
-                        </span>
-                    </div>
-                    {verdictInfo.details && (
-                        <p className={`mt-2 text-sm ${verdictInfo.type === 'pass' ? 'text-success-text' :
-                            verdictInfo.type === 'warning' ? 'text-warning-text' :
-                                verdictInfo.type === 'error' ? 'text-warning-text' :
-                                    'text-error-text'
-                            }`}>
-                            {verdictInfo.details}
-                        </p>
-                    )}
-                </div>
-            )}
-
+        <div className="bg-[var(--surface)] shadow rounded-lg flex flex-col h-[750px]">
             {/* Hyperparameter Controls */}
             <div className="border-b border-[var(--border)]">
                 <button
@@ -352,6 +333,17 @@ export default function EvaluationInspector({ provider, model, rawResponse, resu
                 >
                     Raw Response
                 </button>
+                {resultData && activeTab === 'output' && (
+                    <button
+                        onClick={() => setExpanded(true)}
+                        className="px-3 py-2 text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface)] transition-colors"
+                        title="Expand to full screen"
+                    >
+                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" />
+                        </svg>
+                    </button>
+                )}
             </div>
 
             {/* Content — all read-only */}
@@ -385,6 +377,59 @@ export default function EvaluationInspector({ provider, model, rawResponse, resu
                     </pre>
                 )}
             </div>
+
+            {/* Fullscreen Modal */}
+            {expanded && resultData && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50" onClick={() => setExpanded(false)}>
+                    <div
+                        className="bg-[var(--surface)] rounded-lg shadow-2xl flex flex-col"
+                        style={{ width: '90vw', height: '90vh' }}
+                        onClick={(e) => e.stopPropagation()}
+                    >
+                        {/* Modal Header */}
+                        <div className="flex items-center justify-between px-6 py-4 border-b border-[var(--border)]">
+                            <div className="flex items-center gap-3">
+                                <h2 className="text-lg font-semibold text-[var(--foreground)]">Evaluation Results</h2>
+                                {verdictInfo && (
+                                    <span className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full text-xs font-medium ${
+                                        verdictInfo.type === 'pass' ? 'bg-emerald-50 text-emerald-700' :
+                                        verdictInfo.type === 'warning' ? 'bg-amber-50 text-amber-700' :
+                                        verdictInfo.type === 'error' ? 'bg-amber-50 text-amber-700' :
+                                        'bg-red-50 text-red-700'
+                                    }`}>
+                                        <span className={`w-1.5 h-1.5 rounded-full ${
+                                            verdictInfo.type === 'pass' ? 'bg-emerald-500' :
+                                            verdictInfo.type === 'warning' ? 'bg-amber-500' :
+                                            verdictInfo.type === 'error' ? 'bg-amber-500' :
+                                            'bg-red-500'
+                                        }`} />
+                                        {verdictInfo.message}
+                                    </span>
+                                )}
+                            </div>
+                            <button
+                                onClick={() => setExpanded(false)}
+                                className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-1 rounded hover:bg-[var(--surface-hover)] transition-colors"
+                            >
+                                <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                </svg>
+                            </button>
+                        </div>
+                        {/* Modal Content */}
+                        <div className="flex-1 overflow-auto p-6">
+                            <EvaluationResultsView
+                                resultData={resultData}
+                                model={result?.model}
+                                totalTokens={result?.totalTokens}
+                                inputTokens={result?.inputTokens}
+                                outputTokens={result?.outputTokens}
+                                latencyMs={result?.latencyMs}
+                            />
+                        </div>
+                    </div>
+                </div>
+            )}
         </div>
     );
 }

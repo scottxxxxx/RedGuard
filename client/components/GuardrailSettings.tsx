@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 
 // Custom Dialog Component
 const InfoDialog = ({ isOpen, onClose, title, message }: { isOpen: boolean; onClose: () => void; title: string; message: string }) => {
@@ -123,6 +123,120 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
     });
     const [featureDetails, setFeatureDetails] = useState<Record<string, string[]>>({});
 
+    // Backup state
+    const [backupStatus, setBackupStatus] = useState<'idle' | 'starting' | 'exporting' | 'extracting' | 'completed' | 'error'>('idle');
+    const [backupError, setBackupError] = useState<string | null>(null);
+    const [backupJobId, setBackupJobId] = useState<string | null>(null);
+    const pollIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
+    const dismissTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+    const applyAnalysisResult = useCallback((data: any) => {
+        const newToggles = {
+            toxicity_input: false,
+            toxicity_output: false,
+            topics_input: false,
+            topics_output: false,
+            injection: false,
+            regex: false
+        };
+
+        if (data.descriptions) setDescriptions(data.descriptions);
+        if (data.featureDetails) setFeatureDetails(data.featureDetails);
+
+        if (data.enabledGuardrails && Array.isArray(data.enabledGuardrails)) {
+            data.enabledGuardrails.forEach((key: string) => {
+                if (key.includes('toxicity')) {
+                    if (key.includes('input')) newToggles.toxicity_input = true;
+                    if (key.includes('output')) newToggles.toxicity_output = true;
+                } else if (key.includes('topics')) {
+                    if (key.includes('input')) newToggles.topics_input = true;
+                    if (key.includes('output')) newToggles.topics_output = true;
+                } else if (key.includes('injection')) {
+                    newToggles.injection = true;
+                } else if (key.includes('regex')) {
+                    newToggles.regex = true;
+                }
+            });
+        }
+
+        if (data.topics && data.topics.length > 0) {
+            setBannedTopics(data.topics.join(', '));
+        }
+
+        if (data.regexPatterns && data.regexPatterns.length > 0) {
+            setRegexPatterns(data.regexPatterns.join('\n'));
+        }
+
+        setToggles(newToggles);
+    }, []);
+
+    // Cleanup polling/dismiss timers
+    useEffect(() => {
+        return () => {
+            if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+            if (dismissTimerRef.current) clearTimeout(dismissTimerRef.current);
+        };
+    }, []);
+
+    const handleFetchFromBot = async () => {
+        if (!botConfig?.botId || !botConfig?.clientId || !botConfig?.clientSecret) return;
+
+        setBackupStatus('starting');
+        setBackupError(null);
+
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+            const startRes = await fetch(`${apiUrl}/kore/backup-guardrails`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ botConfig })
+            });
+
+            if (!startRes.ok) {
+                const errData = await startRes.json();
+                throw new Error(errData.error || 'Failed to start backup');
+            }
+
+            const { jobId } = await startRes.json();
+            setBackupJobId(jobId);
+            setBackupStatus('exporting');
+
+            // Poll for status
+            pollIntervalRef.current = setInterval(async () => {
+                try {
+                    const statusRes = await fetch(`${apiUrl}/kore/backup-guardrails/${jobId}`);
+                    const statusData = await statusRes.json();
+
+                    if (statusData.status === 'completed' && statusData.guardrails) {
+                        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                        pollIntervalRef.current = null;
+                        setBackupStatus('completed');
+                        applyAnalysisResult(statusData.guardrails);
+
+                        // Auto-dismiss after 5s
+                        dismissTimerRef.current = setTimeout(() => {
+                            setBackupStatus('idle');
+                        }, 5000);
+                    } else if (statusData.status === 'failed') {
+                        if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                        pollIntervalRef.current = null;
+                        setBackupStatus('error');
+                        setBackupError(statusData.error || 'Export failed');
+                    }
+                    // else still in progress, keep polling
+                } catch (pollErr) {
+                    if (pollIntervalRef.current) clearInterval(pollIntervalRef.current);
+                    pollIntervalRef.current = null;
+                    setBackupStatus('error');
+                    setBackupError('Lost connection to backup service');
+                }
+            }, 5000);
+        } catch (err) {
+            setBackupStatus('error');
+            setBackupError(err instanceof Error ? err.message : String(err));
+        }
+    };
+
     useEffect(() => {
         const active = Object.entries(toggles)
             .filter(([_, enabled]) => enabled)
@@ -154,8 +268,8 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                     </h3>
                 </div>
 
-                {/* Import Button */}
-                <div>
+                {/* Import / Fetch Buttons */}
+                <div className="flex items-center gap-2">
                     <input
                         type="file"
                         id="config-upload"
@@ -181,17 +295,7 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                                         onBotConfigUpdate((prev: any) => ({ ...prev, botId }));
                                     }
 
-                                    // 2. Clear old state before applying new analysis
-                                    const newToggles = {
-                                        toxicity_input: false,
-                                        toxicity_output: false,
-                                        topics_input: false,
-                                        topics_output: false,
-                                        injection: false,
-                                        regex: false
-                                    };
-
-                                    // 3. Request logic analysis from backend
+                                    // 2. Request logic analysis from backend
                                     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
                                     console.log("🔄 Sending to backend:", apiUrl);
 
@@ -205,53 +309,9 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
 
                                     if (res.ok) {
                                         const data = await res.json();
-                                        console.log("✅ Analysis Result:", data);
-
-                                        // Update Descriptions and Feature Details
-                                        if (data.descriptions) setDescriptions(data.descriptions);
-                                        if (data.featureDetails) setFeatureDetails(data.featureDetails);
-
-                                        // Map enabled guardrails to toggles
-                                        if (data.enabledGuardrails && Array.isArray(data.enabledGuardrails)) {
-                                            data.enabledGuardrails.forEach((key: string) => {
-                                                if (key.includes('toxicity')) {
-                                                    if (key.includes('input')) newToggles.toxicity_input = true;
-                                                    if (key.includes('output')) newToggles.toxicity_output = true;
-                                                } else if (key.includes('topics')) {
-                                                    if (key.includes('input')) newToggles.topics_input = true;
-                                                    if (key.includes('output')) newToggles.topics_output = true;
-                                                } else if (key.includes('injection')) {
-                                                    newToggles.injection = true;
-                                                } else if (key.includes('regex')) {
-                                                    newToggles.regex = true;
-                                                }
-                                            });
-                                        }
-
-                                        // Apply data fields
-                                        console.log("📋 Received topics:", data.topics);
-                                        console.log("📋 Received regexPatterns:", data.regexPatterns);
-
-                                        if (data.topics && data.topics.length > 0) {
-                                            const topicsStr = data.topics.join(', ');
-                                            console.log("✏️ Setting bannedTopics to:", topicsStr);
-                                            setBannedTopics(topicsStr);
-                                        } else {
-                                            console.log("⚠️ No topics to set");
-                                        }
-
-                                        if (data.regexPatterns && data.regexPatterns.length > 0) {
-                                            const regexStr = data.regexPatterns.join('\n');
-                                            console.log("✏️ Setting regexPatterns to:", regexStr);
-                                            setRegexPatterns(regexStr);
-                                        } else {
-                                            console.log("⚠️ No regex patterns to set");
-                                        }
-
-                                        // Force UI refresh with new toggles
-                                        console.log("🔄 Updating toggles:", newToggles);
-                                        setToggles(newToggles);
-                                        console.log("✅ Guardrail settings updated successfully!");
+                                        console.log("Analysis Result:", data);
+                                        applyAnalysisResult(data);
+                                        console.log("Guardrail settings updated successfully!");
                                     } else {
                                         const errorText = await res.text();
                                         console.error("❌ Failed to analyze config file. Status:", res.status);
@@ -281,8 +341,64 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                         </svg>
                         <span className="leading-tight text-center">Import&nbsp;App<br />Definition&nbsp;File</span>
                     </button>
+                    <button
+                        onClick={handleFetchFromBot}
+                        disabled={!botConfig?.botId || !botConfig?.clientId || !botConfig?.clientSecret || backupStatus === 'starting' || backupStatus === 'exporting' || backupStatus === 'extracting'}
+                        className="text-xs flex items-center gap-1 text-[var(--primary-600)] hover:text-[var(--primary-700)] font-medium bg-[var(--primary-50)] hover:bg-[var(--primary-100)] px-2 py-1 rounded transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+                        title={!botConfig?.botId ? "Connect to a bot first" : "Fetch guardrail configuration directly from the bot"}
+                    >
+                        <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
+                        </svg>
+                        <span className="leading-tight text-center">Fetch&nbsp;from<br />Bot</span>
+                    </button>
                 </div>
             </div>
+
+            {/* Backup Status Indicator */}
+            {backupStatus !== 'idle' && (
+                <div className={`mb-3 px-3 py-2 rounded-md text-xs flex items-center gap-2 ${
+                    backupStatus === 'completed'
+                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                        : backupStatus === 'error'
+                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
+                            : 'bg-blue-50 text-blue-700 border border-blue-200'
+                }`}>
+                    {(backupStatus === 'starting' || backupStatus === 'exporting' || backupStatus === 'extracting') && (
+                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
+                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                        </svg>
+                    )}
+                    {backupStatus === 'completed' && (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                        </svg>
+                    )}
+                    {backupStatus === 'error' && (
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                    )}
+                    <span className="flex-1">
+                        {backupStatus === 'starting' && 'Initiating bot backup...'}
+                        {backupStatus === 'exporting' && 'Exporting bot configuration... This may take 1-2 minutes.'}
+                        {backupStatus === 'extracting' && 'Extracting guardrail settings...'}
+                        {backupStatus === 'completed' && 'Guardrails loaded from bot'}
+                        {backupStatus === 'error' && (backupError || 'An error occurred')}
+                    </span>
+                    {(backupStatus === 'completed' || backupStatus === 'error') && (
+                        <button
+                            onClick={() => { setBackupStatus('idle'); setBackupError(null); }}
+                            className="text-current opacity-60 hover:opacity-100"
+                        >
+                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                            </svg>
+                        </button>
+                    )}
+                </div>
+            )}
 
             <div className="space-y-4">
                 {/* Toxicity */}

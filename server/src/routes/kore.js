@@ -1,7 +1,12 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
+const AdmZip = require('adm-zip');
 const koreApiService = require('../services/kore-api');
 const apiLogger = require('../services/api-logger');
+const botConfigAnalyzer = require('../services/bot-config-analyzer');
+
+const BOT_BACKUP_SERVICE_URL = `http://localhost:${process.env.BOT_BACKUP_SERVICE_PORT || 3005}`;
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
@@ -297,6 +302,174 @@ router.post('/validate', async (req, res) => {
 
         res.status(statusCode).json({
             error: error.message
+        });
+    }
+});
+
+// ── Bot Backup / Fetch Guardrails from Bot ──────────────────────────────
+
+router.post('/backup-guardrails', async (req, res) => {
+    const { botConfig, userId } = req.body;
+    const explicitUserId = userId || 'unknown';
+
+    try {
+        if (!botConfig || !botConfig.botId || !botConfig.clientId || !botConfig.clientSecret) {
+            return res.status(400).json({ error: "Bot ID, Client ID, and Client Secret are required." });
+        }
+
+        // Derive platform and bots hosts from botConfig.host
+        let platformHost = 'platform.kore.ai';
+        let botsHost = 'bots.kore.ai';
+
+        if (botConfig.host) {
+            const hostClean = botConfig.host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+            if (hostClean.includes('bots.')) {
+                botsHost = hostClean;
+                platformHost = hostClean.replace('bots.', 'platform.');
+            } else if (hostClean.includes('platform.')) {
+                platformHost = hostClean;
+                botsHost = hostClean.replace('platform.', 'bots.');
+            } else {
+                platformHost = hostClean;
+                botsHost = hostClean;
+            }
+        }
+
+        console.log(`[Backup Guardrails] Starting backup for bot ${botConfig.botId} via ${BOT_BACKUP_SERVICE_URL}`);
+
+        const response = await axios.post(`${BOT_BACKUP_SERVICE_URL}/api/backup/start`, {
+            botId: botConfig.botId,
+            clientId: botConfig.clientId,
+            clientSecret: botConfig.clientSecret,
+            platformHost,
+            botsHost
+        });
+
+        res.json({
+            jobId: response.data.jobId,
+            status: response.data.status || 'started'
+        });
+    } catch (error) {
+        console.error("[Backup Guardrails] Error:", error.message);
+
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+            return res.status(503).json({
+                error: "Backup service unavailable. Make sure the bot-backup microservice is running on port " + (process.env.BOT_BACKUP_SERVICE_PORT || 3005)
+            });
+        }
+
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.error || error.message
+        });
+    }
+});
+
+router.get('/backup-guardrails/:jobId', async (req, res) => {
+    const { jobId } = req.params;
+
+    try {
+        const response = await axios.get(`${BOT_BACKUP_SERVICE_URL}/api/backup/status/${jobId}`);
+        const jobData = response.data;
+
+        // If completed, download zip, extract, and analyze
+        if (jobData.status === 'completed' && jobData.downloadUrl) {
+            console.log(`[Backup Guardrails] Job ${jobId} completed. Downloading zip...`);
+
+            try {
+                const zipResponse = await axios.get(jobData.downloadUrl, {
+                    responseType: 'arraybuffer',
+                    timeout: 60000
+                });
+
+                const zip = new AdmZip(Buffer.from(zipResponse.data));
+                const zipEntries = zip.getEntries();
+
+                // Find the App Definition JSON file
+                let targetEntry = null;
+
+                // First try: look for botDefinition or AppDefinition pattern
+                targetEntry = zipEntries.find(entry =>
+                    !entry.isDirectory &&
+                    entry.entryName.endsWith('.json') &&
+                    (entry.entryName.toLowerCase().includes('botdefinition') ||
+                     entry.entryName.toLowerCase().includes('appdefinition'))
+                );
+
+                // Fallback: largest JSON file
+                if (!targetEntry) {
+                    const jsonEntries = zipEntries.filter(entry =>
+                        !entry.isDirectory && entry.entryName.endsWith('.json')
+                    );
+                    if (jsonEntries.length > 0) {
+                        targetEntry = jsonEntries.reduce((largest, entry) =>
+                            entry.header.size > largest.header.size ? entry : largest
+                        );
+                    }
+                }
+
+                if (!targetEntry) {
+                    return res.status(500).json({
+                        status: 'failed',
+                        error: 'No JSON file found in the exported zip'
+                    });
+                }
+
+                console.log(`[Backup Guardrails] Extracting: ${targetEntry.entryName}`);
+                const jsonContent = JSON.parse(zip.readAsText(targetEntry));
+
+                // Run through analyzer
+                const analysis = botConfigAnalyzer.analyze(jsonContent);
+
+                return res.json({
+                    status: 'completed',
+                    guardrails: {
+                        enabledGuardrails: analysis.enabledGuardrails,
+                        topics: analysis.topics,
+                        regexPatterns: analysis.regexPatterns,
+                        descriptions: analysis.descriptions,
+                        featureDetails: analysis.featureDetails
+                    }
+                });
+            } catch (extractError) {
+                console.error("[Backup Guardrails] Extract/analyze error:", extractError.message);
+                return res.status(500).json({
+                    status: 'failed',
+                    error: `Failed to process exported bot: ${extractError.message}`
+                });
+            }
+        }
+
+        // If failed, check for scope errors
+        if (jobData.status === 'failed') {
+            const isScopeError = jobData.error &&
+                (jobData.error.includes('403') || jobData.error.includes('401') ||
+                 jobData.error.includes('scope') || jobData.error.includes('permission'));
+
+            return res.json({
+                status: 'failed',
+                error: isScopeError
+                    ? "App Export scope not enabled. Go to your Kore.ai App settings and add the 'Bot Export' API scope."
+                    : (jobData.error || 'Export failed'),
+                scopeRequired: isScopeError
+            });
+        }
+
+        // In progress — pass through
+        res.json({
+            status: jobData.status || 'exporting',
+            progress: jobData.progress
+        });
+    } catch (error) {
+        console.error("[Backup Guardrails] Status check error:", error.message);
+
+        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
+            return res.status(503).json({
+                error: "Backup service unavailable"
+            });
+        }
+
+        res.status(error.response?.status || 500).json({
+            error: error.response?.data?.error || error.message
         });
     }
 });
