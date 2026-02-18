@@ -6,7 +6,7 @@ const koreApiService = require('../services/kore-api');
 const apiLogger = require('../services/api-logger');
 const botConfigAnalyzer = require('../services/bot-config-analyzer');
 
-const BOT_BACKUP_SERVICE_URL = `http://localhost:${process.env.BOT_BACKUP_SERVICE_PORT || 3005}`;
+const BOT_BACKUP_SERVICE_URL = process.env.BOT_BACKUP_SERVICE_URL || `http://localhost:${process.env.BOT_BACKUP_SERVICE_PORT || 3005}`;
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
