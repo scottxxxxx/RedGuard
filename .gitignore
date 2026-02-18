@@ -73,3 +73,6 @@ coverage/
 .tmp/
 .tool-setup.md
 keys/
+github_deploy_key
+github_deploy_key.pub
+gcp_keys_temp.txt
