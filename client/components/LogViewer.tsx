@@ -26,8 +26,16 @@ interface LogStats {
     avgLatencyMs: number;
     maxLatencyMs: number;
     errorRate: string;
+    prevPeriodTotal: number | null;
+    last24h: number | null;
+    dailyAvg: number | null;
+    evalTokens: number;
+    evalOutcome: { passed: number; failed: number; total: number };
+    chatStats: { avgLatencyMs: number; maxLatencyMs: number; errorCount: number };
     byType: Record<string, number>;
-    byProvider: Array<{ provider: string; count: number; avgLatencyMs: number }>;
+    byProvider: Array<{ provider: string; count: number; avgLatencyMs: number; totalTokens: number }>;
+    errorsByType: Record<string, number>;
+    lastError: { timestamp: string; logType: string; errorMessage: string } | null;
 }
 
 export default function LogViewer() {
@@ -135,6 +143,7 @@ export default function LogViewer() {
             if (filter.last24h) {
                 params.append('startDate', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
                 params.append('endDate', new Date().toISOString());
+                params.append('last24h', 'true');
             } else {
                 if (filter.startDate) params.append('startDate', filter.startDate);
                 if (filter.endDate) params.append('endDate', filter.endDate);
@@ -303,6 +312,8 @@ export default function LogViewer() {
                 const latencyPct = stats.maxLatencyMs > 0 ? Math.min((stats.avgLatencyMs / stats.maxLatencyMs) * 100, 100) : 0;
                 const chatCount = stats.byType['kore_chat'] || 0;
                 const evalCount = stats.byType['llm_evaluate'] || 0;
+                const genAiCount = stats.byType['kore_genAI_logs'] || 0;
+                const otherCount = Math.max(0, stats.totalLogs - chatCount - evalCount - genAiCount);
                 const koreProviders = stats.byProvider?.filter(p => p.provider !== 'kore') || [];
 
                 return (
@@ -314,23 +325,77 @@ export default function LogViewer() {
                                     <div className="text-3xl font-bold text-[var(--foreground)] tracking-tight">{stats.totalLogs}</div>
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Total Requests</div>
                                 </div>
-                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
-                                    </svg>
-                                </div>
+                                {/* Trend indicator */}
+                                {(() => {
+                                    // Mode 1: Last 24h — compare vs daily average
+                                    if (stats.last24h !== null && stats.dailyAvg !== null && stats.dailyAvg > 0) {
+                                        const diff = stats.last24h - stats.dailyAvg;
+                                        const pctChange = Math.round((diff / stats.dailyAvg) * 100);
+                                        const isUp = diff > 0;
+                                        const isFlat = diff === 0;
+                                        return (
+                                            <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                                                isFlat ? 'bg-gray-50 text-gray-500'
+                                                    : isUp ? 'bg-emerald-50 text-emerald-600'
+                                                    : 'bg-red-50 text-red-500'
+                                            }`}>
+                                                <div className="flex items-center gap-0.5">
+                                                    {!isFlat && (
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                                                                d={isUp ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                                        </svg>
+                                                    )}
+                                                    <span>{isFlat ? '—' : `${Math.abs(pctChange)}%`}</span>
+                                                </div>
+                                                <span className="text-[9px] font-normal text-[var(--foreground-muted)]">vs daily avg</span>
+                                            </div>
+                                        );
+                                    }
+                                    // Mode 2: Date range filter — compare vs previous period
+                                    if (stats.prevPeriodTotal !== null) {
+                                        const diff = stats.totalLogs - stats.prevPeriodTotal;
+                                        const pctChange = stats.prevPeriodTotal > 0
+                                            ? Math.round((diff / stats.prevPeriodTotal) * 100)
+                                            : (stats.totalLogs > 0 ? 100 : 0);
+                                        const isUp = diff > 0;
+                                        const isFlat = diff === 0;
+                                        return (
+                                            <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                                                isFlat ? 'bg-gray-50 text-gray-500'
+                                                    : isUp ? 'bg-emerald-50 text-emerald-600'
+                                                    : 'bg-red-50 text-red-500'
+                                            }`}>
+                                                <div className="flex items-center gap-0.5">
+                                                    {!isFlat && (
+                                                        <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5}
+                                                                d={isUp ? "M5 15l7-7 7 7" : "M19 9l-7 7-7-7"} />
+                                                        </svg>
+                                                    )}
+                                                    <span>{isFlat ? '—' : `${Math.abs(pctChange)}%`}</span>
+                                                </div>
+                                                <span className="text-[9px] font-normal text-[var(--foreground-muted)]">vs prev period</span>
+                                            </div>
+                                        );
+                                    }
+                                    // No filter — no meaningful trend to show
+                                    return null;
+                                })()}
                             </div>
                             {/* Mini type breakdown bar */}
-                            {stats.totalLogs > 0 && (
+                            {(chatCount + evalCount + genAiCount) > 0 && (
                                 <div className="mt-3">
-                                    <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100">
-                                        {chatCount > 0 && <div className="bg-blue-400" style={{ width: `${(chatCount / stats.totalLogs) * 100}%` }} />}
-                                        {evalCount > 0 && <div className="bg-purple-400" style={{ width: `${(evalCount / stats.totalLogs) * 100}%` }} />}
-                                        {(stats.totalLogs - chatCount - evalCount) > 0 && <div className="bg-gray-300" style={{ width: `${((stats.totalLogs - chatCount - evalCount) / stats.totalLogs) * 100}%` }} />}
+                                    <div className="flex w-full h-1.5 rounded-full overflow-hidden">
+                                        {chatCount > 0 && <div className="bg-blue-400" style={{ width: `${(chatCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
+                                        {evalCount > 0 && <div className="bg-purple-400" style={{ width: `${(evalCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
+                                        {genAiCount > 0 && <div className="bg-amber-400" style={{ width: `${(genAiCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
+                                        {otherCount > 0 && <div className="bg-gray-300" style={{ width: `${(otherCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
                                     </div>
                                     <div className="flex gap-3 mt-1.5">
                                         <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Chat</span>
                                         <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />Eval</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />GenAI</span>
                                         <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />Other</span>
                                     </div>
                                 </div>
@@ -342,7 +407,17 @@ export default function LogViewer() {
                             <div className="flex items-start justify-between">
                                 <div>
                                     <div className={`text-3xl font-bold tracking-tight ${stats.errorLogs > 0 ? 'text-red-600' : 'text-[var(--foreground)]'}`}>{stats.errorLogs}</div>
-                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Errors</div>
+                                    <div className="flex items-center gap-2 mt-1">
+                                        <span className="text-xs font-medium text-[var(--foreground-muted)]">Errors</span>
+                                        <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                            errorSeverity === 'none' ? 'text-green-700 bg-green-50' :
+                                            errorSeverity === 'low' ? 'text-green-700 bg-green-50' :
+                                            errorSeverity === 'medium' ? 'text-orange-700 bg-orange-50' :
+                                            'text-red-700 bg-red-50'
+                                        }`}>
+                                            {errorSeverity === 'none' ? 'All Clear' : errorSeverity === 'low' ? 'Low' : errorSeverity === 'medium' ? 'Elevated' : 'Critical'}
+                                        </span>
+                                    </div>
                                 </div>
                                 {/* SVG donut ring */}
                                 <div className="relative w-10 h-10">
@@ -358,83 +433,150 @@ export default function LogViewer() {
                                     </span>
                                 </div>
                             </div>
-                            <div className="mt-2">
-                                <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                    errorSeverity === 'none' ? 'text-green-700 bg-green-50' :
-                                    errorSeverity === 'low' ? 'text-green-700 bg-green-50' :
-                                    errorSeverity === 'medium' ? 'text-orange-700 bg-orange-50' :
-                                    'text-red-700 bg-red-50'
-                                }`}>
-                                    {errorSeverity === 'none' ? 'All Clear' : errorSeverity === 'low' ? 'Low' : errorSeverity === 'medium' ? 'Elevated' : 'Critical'}
-                                </span>
-                            </div>
+                            {/* Error breakdown by type + last error */}
+                            {stats.errorLogs > 0 && (() => {
+                                const ebt = stats.errorsByType || {};
+                                const errChat = ebt['kore_chat'] || 0;
+                                const errEval = ebt['llm_evaluate'] || 0;
+                                const errGenAi = ebt['kore_genAI_logs'] || 0;
+                                const errOther = Math.max(0, stats.errorLogs - errChat - errEval - errGenAi);
+                                return (
+                                    <div className="mt-3">
+                                        <div className="flex w-full h-1.5 rounded-full overflow-hidden">
+                                            {errChat > 0 && <div className="bg-blue-400" style={{ width: `${(errChat / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
+                                            {errEval > 0 && <div className="bg-purple-400" style={{ width: `${(errEval / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
+                                            {errGenAi > 0 && <div className="bg-amber-400" style={{ width: `${(errGenAi / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
+                                            {errOther > 0 && <div className="bg-gray-300" style={{ width: `${(errOther / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
+                                        </div>
+                                        <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
+                                            {errChat > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Chat {errChat}</span>}
+                                            {errEval > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />Eval {errEval}</span>}
+                                            {errGenAi > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />GenAI {errGenAi}</span>}
+                                            {errOther > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />Other {errOther}</span>}
+                                        </div>
+                                        {stats.lastError && (
+                                            <div className="text-[10px] text-[var(--foreground-muted)] mt-1">
+                                                Last: <span className="font-mono font-medium">{(() => {
+                                                    const ago = Date.now() - new Date(stats.lastError.timestamp).getTime();
+                                                    const mins = Math.floor(ago / 60000);
+                                                    if (mins < 1) return 'just now';
+                                                    if (mins < 60) return `${mins}m ago`;
+                                                    const hrs = Math.floor(mins / 60);
+                                                    if (hrs < 24) return `${hrs}h ago`;
+                                                    return `${Math.floor(hrs / 24)}d ago`;
+                                                })()}</span>
+                                            </div>
+                                        )}
+                                    </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Chat Messages */}
                         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <div className="text-3xl font-bold text-blue-600 tracking-tight">{chatCount}</div>
+                                    <div className="text-3xl font-bold text-[var(--foreground)] tracking-tight">{chatCount}</div>
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Chat Messages</div>
                                 </div>
-                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                                    </svg>
-                                </div>
+                                {/* Success rate badge */}
+                                {chatCount > 0 && (
+                                    <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                                        stats.chatStats.errorCount === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                                    }`}>
+                                        <span>{Math.round(((chatCount - stats.chatStats.errorCount) / chatCount) * 100)}%</span>
+                                        <span className="text-[9px] font-normal text-[var(--foreground-muted)]">success</span>
+                                    </div>
+                                )}
                             </div>
-                            <div className="mt-3 text-[10px] text-[var(--foreground-muted)]">
-                                {chatCount > 0
-                                    ? `${((chatCount / Math.max(stats.totalLogs, 1)) * 100).toFixed(0)}% of all traffic`
-                                    : 'No active chats'}
-                            </div>
-                        </div>
-
-                        {/* LLM Evaluations with provider bars */}
-                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
-                            <div className="flex items-start justify-between">
-                                <div>
-                                    <div className="text-3xl font-bold text-purple-600 tracking-tight">{evalCount}</div>
-                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">LLM Evaluations</div>
-                                </div>
-                                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
-                                    </svg>
-                                </div>
-                            </div>
-                            {/* Mini provider bars */}
-                            {koreProviders.length > 0 && (
-                                <div className="mt-3 space-y-1">
-                                    {koreProviders.slice(0, 3).map(p => (
-                                        <div key={p.provider} className="flex items-center gap-2">
-                                            <span className="text-[10px] text-[var(--foreground-muted)] w-14 truncate capitalize">{p.provider}</span>
-                                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                                <div className="h-full rounded-full" style={{
-                                                    width: `${(p.count / maxProviderCount) * 100}%`,
-                                                    backgroundColor: providerColors[p.provider] || providerColors.unknown
-                                                }} />
-                                            </div>
-                                            <span className="text-[10px] font-mono text-[var(--foreground-muted)]">{p.count}</span>
+                            <div className="mt-3 space-y-1">
+                                {chatCount > 0 ? (
+                                    <>
+                                        <div className="text-[10px] text-[var(--foreground-muted)]">
+                                            Avg response: <span className="font-mono font-medium">{stats.chatStats.avgLatencyMs >= 10000 ? `${(stats.chatStats.avgLatencyMs / 1000).toFixed(1)}s` : `${stats.chatStats.avgLatencyMs.toLocaleString()}ms`}</span>
+                                            {stats.chatStats.maxLatencyMs > 0 && (
+                                                <span className="ml-1 text-[var(--foreground-muted)]">
+                                                    (max {stats.chatStats.maxLatencyMs >= 10000 ? `${(stats.chatStats.maxLatencyMs / 1000).toFixed(1)}s` : `${stats.chatStats.maxLatencyMs.toLocaleString()}ms`})
+                                                </span>
+                                            )}
                                         </div>
-                                    ))}
-                                    {koreProviders.length === 0 && (
-                                        <div className="text-[10px] text-[var(--foreground-muted)]">No providers yet</div>
-                                    )}
-                                </div>
-                            )}
-                            {koreProviders.length === 0 && (
-                                <div className="mt-3 text-[10px] text-[var(--foreground-muted)]">
-                                    {evalCount > 0 ? `${evalCount} evaluation${evalCount !== 1 ? 's' : ''} run` : 'No evaluations yet'}
-                                </div>
-                            )}
+                                        {stats.chatStats.errorCount > 0 && (
+                                            <div className="text-[10px] text-red-500">
+                                                {stats.chatStats.errorCount} failed request{stats.chatStats.errorCount !== 1 ? 's' : ''}
+                                            </div>
+                                        )}
+                                    </>
+                                ) : (
+                                    <div className="text-[10px] text-[var(--foreground-muted)]">No active chats</div>
+                                )}
+                            </div>
                         </div>
 
-                        {/* Total Tokens with progress bar */}
+                        {/* LLM Evaluations — run-centric */}
                         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <div className="text-3xl font-bold text-emerald-600 tracking-tight">{(stats.totalTokens || 0).toLocaleString()}</div>
+                                    <div className={`text-3xl font-bold tracking-tight ${
+                                        stats.evalOutcome.total === 0 ? 'text-[var(--foreground)]'
+                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.10 ? 'text-red-600'
+                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.05 ? 'text-amber-500'
+                                            : 'text-emerald-600'
+                                    }`}>{stats.evalOutcome.total}</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Evaluation Runs</div>
+                                </div>
+                                {stats.evalOutcome.total > 0 ? (
+                                    <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
+                                        stats.evalOutcome.failed === 0 ? 'bg-emerald-50 text-emerald-600'
+                                            : stats.evalOutcome.passed === 0 ? 'bg-red-50 text-red-500'
+                                            : 'bg-amber-50 text-amber-600'
+                                    }`}>
+                                        <span>{Math.round((stats.evalOutcome.passed / stats.evalOutcome.total) * 100)}%</span>
+                                        <span className="text-[9px] font-normal text-[var(--foreground-muted)]">pass rate</span>
+                                    </div>
+                                ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                )}
+                            </div>
+                            {stats.evalOutcome.total > 0 ? (
+                                <div className="mt-3">
+                                    {/* Pass/Fail breakdown bar */}
+                                    <div className="flex w-full h-1.5 rounded-full overflow-hidden">
+                                        <div className="bg-emerald-400" style={{ width: `${(stats.evalOutcome.passed / stats.evalOutcome.total) * 100}%` }} />
+                                        <div className="bg-red-400" style={{ width: `${(stats.evalOutcome.failed / stats.evalOutcome.total) * 100}%` }} />
+                                    </div>
+                                    <div className="flex gap-3 mt-1.5">
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-emerald-400 inline-block" />Pass {stats.evalOutcome.passed}
+                                        </span>
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]">
+                                            <span className="w-1.5 h-1.5 rounded-full bg-red-400 inline-block" />Fail {stats.evalOutcome.failed}
+                                        </span>
+                                    </div>
+                                    {/* Avg eval time */}
+                                    {koreProviders.length > 0 && (() => {
+                                        const totalEvalLatency = koreProviders.reduce((sum, p) => sum + p.avgLatencyMs * p.count, 0);
+                                        const weightedAvg = evalCount > 0 ? Math.round(totalEvalLatency / evalCount) : 0;
+                                        return weightedAvg > 0 && (
+                                            <div className="text-[10px] text-[var(--foreground-muted)] mt-1.5">
+                                                Avg eval time: <span className="font-mono font-medium">{weightedAvg >= 10000 ? `${(weightedAvg / 1000).toFixed(1)}s` : `${weightedAvg.toLocaleString()}ms`}</span>
+                                            </div>
+                                        );
+                                    })()}
+                                </div>
+                            ) : (
+                                <div className="mt-3 text-[10px] text-[var(--foreground-muted)]">No evaluations yet</div>
+                            )}
+                        </div>
+
+                        {/* Total Tokens with provider breakdown */}
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="text-3xl font-bold text-[var(--foreground)] tracking-tight">{(stats.totalTokens || 0).toLocaleString()}</div>
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Total Tokens</div>
                                 </div>
                                 <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
@@ -443,15 +585,50 @@ export default function LogViewer() {
                                     </svg>
                                 </div>
                             </div>
-                            {/* Token usage bar */}
+                            {/* Provider token breakdown bar */}
                             <div className="mt-3">
-                                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
-                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
-                                        style={{ width: `${Math.min(((stats.totalTokens || 0) / Math.max(stats.totalTokens || 1, 100000)) * 100, 100)}%` }} />
-                                </div>
-                                {koreProviders.length > 0 && (
+                                {(() => {
+                                    const tokenProviders = (stats.byProvider || [])
+                                        .filter(p => p.totalTokens > 0)
+                                        .sort((a, b) => b.totalTokens - a.totalTokens);
+                                    if (tokenProviders.length > 0 && stats.totalTokens > 0) {
+                                        const top3 = tokenProviders.slice(0, 3);
+                                        const rest = tokenProviders.slice(3);
+                                        const otherTokens = rest.reduce((sum, p) => sum + p.totalTokens, 0);
+                                        const displayProviders = otherTokens > 0
+                                            ? [...top3, { provider: 'other', totalTokens: otherTokens, count: 0, avgLatencyMs: 0 }]
+                                            : top3;
+                                        return (
+                                            <>
+                                                <div className="flex w-full h-1.5 rounded-full overflow-hidden">
+                                                    {displayProviders.map(p => (
+                                                        <div key={p.provider} className="h-full" style={{
+                                                            width: `${(p.totalTokens / stats.totalTokens) * 100}%`,
+                                                            backgroundColor: providerColors[p.provider] || providerColors.unknown
+                                                        }} />
+                                                    ))}
+                                                </div>
+                                                <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1.5">
+                                                    {displayProviders.map(p => (
+                                                        <span key={p.provider} className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]">
+                                                            <span className="w-1.5 h-1.5 rounded-full inline-block" style={{ backgroundColor: providerColors[p.provider] || providerColors.unknown }} />
+                                                            {p.provider.charAt(0).toUpperCase() + p.provider.slice(1)} {p.totalTokens.toLocaleString()}
+                                                        </span>
+                                                    ))}
+                                                </div>
+                                            </>
+                                        );
+                                    }
+                                    return (
+                                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                            <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
+                                                style={{ width: `${Math.min(((stats.totalTokens || 0) / Math.max(stats.totalTokens || 1, 100000)) * 100, 100)}%` }} />
+                                        </div>
+                                    );
+                                })()}
+                                {stats.evalTokens > 0 && stats.evalOutcome.total > 0 && (
                                     <div className="text-[10px] text-[var(--foreground-muted)] mt-1.5">
-                                        {koreProviders.length} provider{koreProviders.length !== 1 ? 's' : ''} used
+                                        Avg tokens/eval: <span className="font-mono font-medium">{Math.round(stats.evalTokens / stats.evalOutcome.total).toLocaleString()}</span>
                                     </div>
                                 )}
                             </div>

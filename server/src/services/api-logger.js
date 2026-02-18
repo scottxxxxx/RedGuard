@@ -214,7 +214,7 @@ class ApiLogger {
     /**
      * Get summary statistics
      */
-    async getStats({ logType, isError, provider, userId, startDate, endDate } = {}) {
+    async getStats({ logType, isError, provider, userId, startDate, endDate, last24h: isLast24h = false } = {}) {
         const where = {};
 
         if (logType) where.logType = logType;
@@ -231,7 +231,23 @@ class ApiLogger {
             }
         }
 
-        const [totalLogs, errorLogs, byType, byProvider, tokensSum, latencyAvg] = await Promise.all([
+        // Compute previous period for trend comparison
+        let prevPeriodWhere = null;
+        const currentStart = where.timestamp?.gte;
+        const currentEnd = where.timestamp?.lte;
+        if (currentStart && currentEnd) {
+            const durationMs = currentEnd.getTime() - currentStart.getTime();
+            const prevStart = new Date(currentStart.getTime() - durationMs);
+            const prevEnd = new Date(currentStart.getTime() - 1); // 1ms before current start
+            prevPeriodWhere = { ...where, timestamp: { gte: prevStart, lte: prevEnd } };
+        } else if (currentEnd && !currentStart) {
+            // Only endDate: compare vs same duration ending before earliest log
+            // Skip — not enough info for meaningful comparison
+        }
+        // No date filter: compute last 24h vs daily average instead of prev period
+        const isUnfiltered = !currentStart && !currentEnd;
+
+        const [totalLogs, errorLogs, byType, byProvider, tokensSum, latencyAvg, chatLatency, chatErrors, evalTokensSum, errorsByType, lastError] = await Promise.all([
             prisma.apiLog.count({ where }),
             prisma.apiLog.count({ where: { ...where, isError: true } }),
             prisma.apiLog.groupBy({
@@ -243,7 +259,8 @@ class ApiLogger {
                 by: ['provider'],
                 where,
                 _count: true,
-                _avg: { latencyMs: true }
+                _avg: { latencyMs: true },
+                _sum: { totalTokens: true }
             }),
             prisma.apiLog.aggregate({
                 where,
@@ -253,7 +270,69 @@ class ApiLogger {
                 where,
                 _avg: { latencyMs: true },
                 _max: { latencyMs: true }
+            }),
+            // Chat-specific latency
+            prisma.apiLog.aggregate({
+                where: { ...where, logType: 'kore_chat' },
+                _avg: { latencyMs: true },
+                _max: { latencyMs: true }
+            }),
+            // Chat error count
+            prisma.apiLog.count({ where: { ...where, logType: 'kore_chat', isError: true } }),
+            // Eval-specific token sum
+            prisma.apiLog.aggregate({
+                where: { ...where, logType: 'llm_evaluate' },
+                _sum: { totalTokens: true }
+            }),
+            // Errors grouped by logType
+            prisma.apiLog.groupBy({
+                by: ['logType'],
+                where: { ...where, isError: true },
+                _count: true
+            }),
+            // Most recent error
+            prisma.apiLog.findFirst({
+                where: { ...where, isError: true },
+                orderBy: { timestamp: 'desc' },
+                select: { timestamp: true, logType: true, errorMessage: true }
             })
+        ]);
+
+        // Fetch comparison data
+        let prevTotal = null;
+        let last24h = null;
+        let dailyAvg = null;
+
+        if (isLast24h && totalLogs > 0) {
+            // Last 24h mode: compute daily average from ALL logs for comparison
+            const now = new Date();
+            const baseWhere = { ...where };
+            delete baseWhere.timestamp; // Remove date filter to get all-time stats
+            const [allTimeCount, oldest] = await Promise.all([
+                prisma.apiLog.count({ where: baseWhere }),
+                prisma.apiLog.findFirst({ where: baseWhere, orderBy: { timestamp: 'asc' }, select: { timestamp: true } })
+            ]);
+            last24h = totalLogs; // current filtered count IS the last 24h
+            if (oldest) {
+                const daySpan = Math.max(1, Math.ceil((now.getTime() - oldest.timestamp.getTime()) / (24 * 60 * 60 * 1000)));
+                dailyAvg = Math.round(allTimeCount / daySpan);
+            }
+        } else if (prevPeriodWhere && !isUnfiltered) {
+            prevTotal = await prisma.apiLog.count({ where: prevPeriodWhere });
+        }
+
+        // Eval outcome stats from EvaluationRun table
+        const evalWhere = {};
+        if (userId) evalWhere.userId = { contains: userId };
+        if (where.timestamp) {
+            evalWhere.createdAt = {};
+            if (where.timestamp.gte) evalWhere.createdAt.gte = where.timestamp.gte;
+            if (where.timestamp.lte) evalWhere.createdAt.lte = where.timestamp.lte;
+        }
+        const [evalPassed, evalFailed, evalTotal] = await Promise.all([
+            prisma.evaluationRun.count({ where: { ...evalWhere, overallPass: true } }),
+            prisma.evaluationRun.count({ where: { ...evalWhere, overallPass: false } }),
+            prisma.evaluationRun.count({ where: evalWhere })
         ]);
 
         return {
@@ -263,6 +342,16 @@ class ApiLogger {
             avgLatencyMs: Math.round(latencyAvg._avg.latencyMs || 0),
             maxLatencyMs: Math.round(latencyAvg._max.latencyMs || 0),
             errorRate: totalLogs > 0 ? (errorLogs / totalLogs * 100).toFixed(2) : 0,
+            prevPeriodTotal: prevTotal,
+            last24h,
+            dailyAvg,
+            evalTokens: evalTokensSum._sum.totalTokens || 0,
+            evalOutcome: { passed: evalPassed, failed: evalFailed, total: evalTotal },
+            chatStats: {
+                avgLatencyMs: Math.round(chatLatency._avg.latencyMs || 0),
+                maxLatencyMs: Math.round(chatLatency._max.latencyMs || 0),
+                errorCount: chatErrors
+            },
             byType: byType.reduce((acc, item) => {
                 acc[item.logType] = item._count;
                 return acc;
@@ -270,8 +359,18 @@ class ApiLogger {
             byProvider: byProvider.map(item => ({
                 provider: item.provider || 'unknown',
                 count: item._count,
-                avgLatencyMs: Math.round(item._avg.latencyMs || 0)
-            }))
+                avgLatencyMs: Math.round(item._avg.latencyMs || 0),
+                totalTokens: item._sum.totalTokens || 0
+            })),
+            errorsByType: errorsByType.reduce((acc, item) => {
+                acc[item.logType] = item._count;
+                return acc;
+            }, {}),
+            lastError: lastError ? {
+                timestamp: lastError.timestamp,
+                logType: lastError.logType,
+                errorMessage: lastError.errorMessage?.substring(0, 100)
+            } : null
         };
     }
 

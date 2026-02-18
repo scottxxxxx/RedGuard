@@ -28,14 +28,15 @@ router.get('/', async (req, res) => {
 // Get log statistics
 router.get('/stats', async (req, res) => {
     try {
-        const { logType, isError, provider, userId, startDate, endDate } = req.query;
+        const { logType, isError, provider, userId, startDate, endDate, last24h } = req.query;
         const stats = await apiLogger.getStats({
             logType,
             isError: isError === 'true' ? true : isError === 'false' ? false : undefined,
             provider,
             userId,
             startDate,
-            endDate
+            endDate,
+            last24h: last24h === 'true'
         });
         res.json(stats);
     } catch (error) {
