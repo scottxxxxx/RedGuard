@@ -179,7 +179,13 @@ class ApiLogger {
         if (startDate || endDate) {
             where.timestamp = {};
             if (startDate) where.timestamp.gte = new Date(startDate);
-            if (endDate) where.timestamp.lte = new Date(endDate);
+            if (endDate) {
+                // Date-only strings (e.g. "2026-02-18") parse to midnight UTC.
+                // Set to end of day so the selected date is fully included.
+                const end = new Date(endDate);
+                end.setUTCHours(23, 59, 59, 999);
+                where.timestamp.lte = end;
+            }
         }
 
         const [logs, total] = await Promise.all([
@@ -208,15 +214,24 @@ class ApiLogger {
     /**
      * Get summary statistics
      */
-    async getStats(startDate, endDate) {
+    async getStats({ logType, isError, provider, userId, startDate, endDate } = {}) {
         const where = {};
+
+        if (logType) where.logType = logType;
+        if (isError !== undefined) where.isError = isError;
+        if (provider) where.provider = provider;
+        if (userId) where.userId = { contains: userId };
         if (startDate || endDate) {
             where.timestamp = {};
             if (startDate) where.timestamp.gte = new Date(startDate);
-            if (endDate) where.timestamp.lte = new Date(endDate);
+            if (endDate) {
+                const end = new Date(endDate);
+                end.setUTCHours(23, 59, 59, 999);
+                where.timestamp.lte = end;
+            }
         }
 
-        const [totalLogs, errorLogs, byType, byProvider, tokensSum] = await Promise.all([
+        const [totalLogs, errorLogs, byType, byProvider, tokensSum, latencyAvg] = await Promise.all([
             prisma.apiLog.count({ where }),
             prisma.apiLog.count({ where: { ...where, isError: true } }),
             prisma.apiLog.groupBy({
@@ -233,6 +248,11 @@ class ApiLogger {
             prisma.apiLog.aggregate({
                 where,
                 _sum: { totalTokens: true }
+            }),
+            prisma.apiLog.aggregate({
+                where,
+                _avg: { latencyMs: true },
+                _max: { latencyMs: true }
             })
         ]);
 
@@ -240,6 +260,8 @@ class ApiLogger {
             totalLogs,
             errorLogs,
             totalTokens: tokensSum._sum.totalTokens || 0,
+            avgLatencyMs: Math.round(latencyAvg._avg.latencyMs || 0),
+            maxLatencyMs: Math.round(latencyAvg._max.latencyMs || 0),
             errorRate: totalLogs > 0 ? (errorLogs / totalLogs * 100).toFixed(2) : 0,
             byType: byType.reduce((acc, item) => {
                 acc[item.logType] = item._count;

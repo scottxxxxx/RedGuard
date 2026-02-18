@@ -23,6 +23,8 @@ interface LogStats {
     totalLogs: number;
     errorLogs: number;
     totalTokens: number;
+    avgLatencyMs: number;
+    maxLatencyMs: number;
     errorRate: string;
     byType: Record<string, number>;
     byProvider: Array<{ provider: string; count: number; avgLatencyMs: number }>;
@@ -32,11 +34,15 @@ export default function LogViewer() {
     const [logs, setLogs] = useState<ApiLog[]>([]);
     const [stats, setStats] = useState<LogStats | null>(null);
     const [loading, setLoading] = useState(true);
+    const today = new Date().toISOString().split('T')[0];
     const [filter, setFilter] = useState({
         logType: '',
         isError: '',
         provider: '',
-        userId: ''
+        userId: '',
+        startDate: '',
+        endDate: '',
+        last24h: false
     });
     const [sortConfig, setSortConfig] = useState<{ key: keyof ApiLog; direction: 'asc' | 'desc' }>({
         key: 'timestamp',
@@ -65,6 +71,13 @@ export default function LogViewer() {
             if (filter.isError) params.append('isError', filter.isError);
             if (filter.provider) params.append('provider', filter.provider);
             if (filter.userId) params.append('userId', filter.userId);
+            if (filter.last24h) {
+                params.append('startDate', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+                params.append('endDate', new Date().toISOString());
+            } else {
+                if (filter.startDate) params.append('startDate', filter.startDate);
+                if (filter.endDate) params.append('endDate', filter.endDate);
+            }
             params.append('limit', pageSize.toString());
             params.append('offset', ((currentPage - 1) * pageSize).toString());
 
@@ -114,7 +127,20 @@ export default function LogViewer() {
     const fetchStats = async () => {
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
-            const res = await fetch(`${apiUrl}/logs/stats`);
+            const params = new URLSearchParams();
+            if (filter.logType) params.append('logType', filter.logType);
+            if (filter.isError) params.append('isError', filter.isError);
+            if (filter.provider) params.append('provider', filter.provider);
+            if (filter.userId) params.append('userId', filter.userId);
+            if (filter.last24h) {
+                params.append('startDate', new Date(Date.now() - 24 * 60 * 60 * 1000).toISOString());
+                params.append('endDate', new Date().toISOString());
+            } else {
+                if (filter.startDate) params.append('startDate', filter.startDate);
+                if (filter.endDate) params.append('endDate', filter.endDate);
+            }
+
+            const res = await fetch(`${apiUrl}/logs/stats?${params}`);
             const data = await res.json();
             setStats(data);
         } catch (error) {
@@ -166,34 +192,8 @@ export default function LogViewer() {
                 </button>
             </div>
 
-            {/* Stats Cards */}
-            {stats && (
-                <div className="grid grid-cols-5 gap-4 mb-6">
-                    <div className="bg-stats-bg border border-stats-border rounded-lg p-4">
-                        <div className="text-2xl font-bold text-[var(--foreground)]">{stats.totalLogs}</div>
-                        <div className="text-sm text-[var(--foreground-muted)]">Total Requests</div>
-                    </div>
-                    <div className="bg-stats-bg border border-stats-border rounded-lg p-4">
-                        <div className="text-2xl font-bold text-error-text">{stats.errorLogs}</div>
-                        <div className="text-sm text-[var(--foreground-muted)]">Errors ({stats.errorRate}%)</div>
-                    </div>
-                    <div className="bg-stats-bg border border-stats-border rounded-lg p-4">
-                        <div className="text-2xl font-bold text-info-text">{stats.byType['kore_chat'] || 0}</div>
-                        <div className="text-sm text-[var(--foreground-muted)]">Chat Messages</div>
-                    </div>
-                    <div className="bg-stats-bg border border-stats-border rounded-lg p-4">
-                        <div className="text-2xl font-bold text-badge-purple-text">{stats.byType['llm_evaluate'] || 0}</div>
-                        <div className="text-sm text-[var(--foreground-muted)]">LLM Evaluations</div>
-                    </div>
-                    <div className="bg-stats-bg border border-stats-border rounded-lg p-4 border-l-4 border-l-success-border shadow-sm">
-                        <div className="text-2xl font-bold text-success-text">{(stats.totalTokens || 0).toLocaleString()}</div>
-                        <div className="text-sm text-[var(--foreground-muted)] font-medium">Total Tokens Used</div>
-                    </div>
-                </div>
-            )}
-
             {/* Filters */}
-            <div className="flex gap-4 mb-4">
+            <div className="flex flex-wrap gap-4 mb-6">
                 <select
                     value={filter.logType}
                     onChange={(e) => setFilter({ ...filter, logType: e.target.value })}
@@ -233,6 +233,39 @@ export default function LogViewer() {
                     onChange={(e) => setFilter({ ...filter, userId: e.target.value })}
                     className="px-3 py-2 border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-lg"
                 />
+                <div className="flex items-center gap-2">
+                    <label className="text-xs uppercase text-[var(--foreground-muted)] font-medium">From</label>
+                    <input
+                        type="date"
+                        value={filter.startDate}
+                        max={filter.endDate || today}
+                        onChange={(e) => setFilter({ ...filter, startDate: e.target.value, last24h: false })}
+                        onFocus={() => filter.last24h && setFilter(f => ({ ...f, last24h: false }))}
+                        className={`px-3 py-2 border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-lg ${filter.last24h ? 'opacity-40' : ''}`}
+                    />
+                </div>
+                <div className="flex items-center gap-2">
+                    <label className="text-xs uppercase text-[var(--foreground-muted)] font-medium">To</label>
+                    <input
+                        type="date"
+                        value={filter.endDate}
+                        min={filter.startDate || undefined}
+                        max={today}
+                        onChange={(e) => setFilter({ ...filter, endDate: e.target.value, last24h: false })}
+                        onFocus={() => filter.last24h && setFilter(f => ({ ...f, last24h: false }))}
+                        className={`px-3 py-2 border border-[var(--border)] bg-[var(--surface)] text-[var(--foreground)] rounded-lg ${filter.last24h ? 'opacity-40' : ''}`}
+                    />
+                </div>
+                <button
+                    onClick={() => setFilter({ ...filter, startDate: '', endDate: '', last24h: !filter.last24h })}
+                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
+                        filter.last24h
+                            ? 'bg-[var(--primary-600)] text-white border-[var(--primary-600)]'
+                            : 'border-[var(--border)] text-[var(--foreground-secondary)] hover:bg-[var(--surface-hover)]'
+                    }`}
+                >
+                    Last 24h
+                </button>
                 <button
                     onClick={() => { setCurrentPage(1); setExpandedLog(null); fetchLogs(); fetchStats(); }}
                     disabled={loading}
@@ -246,7 +279,218 @@ export default function LogViewer() {
                     )}
                     Refresh
                 </button>
+                <button
+                    onClick={() => {
+                        setFilter({ logType: '', isError: '', provider: '', userId: '', startDate: '', endDate: '', last24h: false });
+                        setCurrentPage(1);
+                        setExpandedLog(null);
+                    }}
+                    className="px-3 py-2 text-sm border border-[var(--border)] text-[var(--foreground-muted)] rounded-lg hover:bg-[var(--surface-hover)] transition-colors"
+                >
+                    Clear Filters
+                </button>
             </div>
+
+            {/* Stats Cards */}
+            {stats && (() => {
+                const errorPct = stats.totalLogs > 0 ? (stats.errorLogs / stats.totalLogs) * 100 : 0;
+                const successPct = 100 - errorPct;
+                const errorSeverity = errorPct === 0 ? 'none' : errorPct < 5 ? 'low' : errorPct < 20 ? 'medium' : 'critical';
+                const providerColors: Record<string, string> = { kore: '#3b82f6', anthropic: '#8b5cf6', openai: '#10b981', gemini: '#f59e0b', deepseek: '#06b6d4', unknown: '#9ca3af' };
+                const maxProviderCount = Math.max(...(stats.byProvider?.map(p => p.count) || [1]), 1);
+                const formatLatency = (ms: number) => ms >= 10000 ? `${(ms / 1000).toFixed(1)}s` : `${ms.toLocaleString()}ms`;
+                const latencyColor = stats.avgLatencyMs < 1000 ? '#059669' : stats.avgLatencyMs < 5000 ? '#d97706' : '#dc2626';
+                const latencyPct = stats.maxLatencyMs > 0 ? Math.min((stats.avgLatencyMs / stats.maxLatencyMs) * 100, 100) : 0;
+                const chatCount = stats.byType['kore_chat'] || 0;
+                const evalCount = stats.byType['llm_evaluate'] || 0;
+                const koreProviders = stats.byProvider?.filter(p => p.provider !== 'kore') || [];
+
+                return (
+                    <div className="grid grid-cols-6 gap-4 mb-6">
+                        {/* Total Requests */}
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="text-3xl font-bold text-[var(--foreground)] tracking-tight">{stats.totalLogs}</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Total Requests</div>
+                                </div>
+                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6" />
+                                    </svg>
+                                </div>
+                            </div>
+                            {/* Mini type breakdown bar */}
+                            {stats.totalLogs > 0 && (
+                                <div className="mt-3">
+                                    <div className="flex h-1.5 rounded-full overflow-hidden bg-gray-100">
+                                        {chatCount > 0 && <div className="bg-blue-400" style={{ width: `${(chatCount / stats.totalLogs) * 100}%` }} />}
+                                        {evalCount > 0 && <div className="bg-purple-400" style={{ width: `${(evalCount / stats.totalLogs) * 100}%` }} />}
+                                        {(stats.totalLogs - chatCount - evalCount) > 0 && <div className="bg-gray-300" style={{ width: `${((stats.totalLogs - chatCount - evalCount) / stats.totalLogs) * 100}%` }} />}
+                                    </div>
+                                    <div className="flex gap-3 mt-1.5">
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Chat</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />Eval</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />Other</span>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Errors with donut */}
+                        <div className={`bg-[var(--surface)] border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow ${errorSeverity === 'critical' ? 'border-red-200 bg-red-50/30' : errorSeverity === 'medium' ? 'border-orange-200' : 'border-[var(--border)]'}`}>
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className={`text-3xl font-bold tracking-tight ${stats.errorLogs > 0 ? 'text-red-600' : 'text-[var(--foreground)]'}`}>{stats.errorLogs}</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Errors</div>
+                                </div>
+                                {/* SVG donut ring */}
+                                <div className="relative w-10 h-10">
+                                    <svg viewBox="0 0 36 36" className="w-10 h-10 -rotate-90">
+                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" strokeWidth="3.5" />
+                                        <circle cx="18" cy="18" r="14" fill="none"
+                                            stroke={errorPct > 20 ? '#dc2626' : errorPct > 5 ? '#f59e0b' : '#059669'}
+                                            strokeWidth="3.5" strokeLinecap="round"
+                                            strokeDasharray={`${successPct * 0.88} 88`} />
+                                    </svg>
+                                    <span className="absolute inset-0 flex items-center justify-center text-[8px] font-bold text-[var(--foreground-muted)]">
+                                        {errorPct.toFixed(0)}%
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="mt-2">
+                                <span className={`text-[10px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
+                                    errorSeverity === 'none' ? 'text-green-700 bg-green-50' :
+                                    errorSeverity === 'low' ? 'text-green-700 bg-green-50' :
+                                    errorSeverity === 'medium' ? 'text-orange-700 bg-orange-50' :
+                                    'text-red-700 bg-red-50'
+                                }`}>
+                                    {errorSeverity === 'none' ? 'All Clear' : errorSeverity === 'low' ? 'Low' : errorSeverity === 'medium' ? 'Elevated' : 'Critical'}
+                                </span>
+                            </div>
+                        </div>
+
+                        {/* Chat Messages */}
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="text-3xl font-bold text-blue-600 tracking-tight">{chatCount}</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Chat Messages</div>
+                                </div>
+                                <div className="w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+                                    </svg>
+                                </div>
+                            </div>
+                            <div className="mt-3 text-[10px] text-[var(--foreground-muted)]">
+                                {chatCount > 0
+                                    ? `${((chatCount / Math.max(stats.totalLogs, 1)) * 100).toFixed(0)}% of all traffic`
+                                    : 'No active chats'}
+                            </div>
+                        </div>
+
+                        {/* LLM Evaluations with provider bars */}
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="text-3xl font-bold text-purple-600 tracking-tight">{evalCount}</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">LLM Evaluations</div>
+                                </div>
+                                <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                    </svg>
+                                </div>
+                            </div>
+                            {/* Mini provider bars */}
+                            {koreProviders.length > 0 && (
+                                <div className="mt-3 space-y-1">
+                                    {koreProviders.slice(0, 3).map(p => (
+                                        <div key={p.provider} className="flex items-center gap-2">
+                                            <span className="text-[10px] text-[var(--foreground-muted)] w-14 truncate capitalize">{p.provider}</span>
+                                            <div className="flex-1 h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                                <div className="h-full rounded-full" style={{
+                                                    width: `${(p.count / maxProviderCount) * 100}%`,
+                                                    backgroundColor: providerColors[p.provider] || providerColors.unknown
+                                                }} />
+                                            </div>
+                                            <span className="text-[10px] font-mono text-[var(--foreground-muted)]">{p.count}</span>
+                                        </div>
+                                    ))}
+                                    {koreProviders.length === 0 && (
+                                        <div className="text-[10px] text-[var(--foreground-muted)]">No providers yet</div>
+                                    )}
+                                </div>
+                            )}
+                            {koreProviders.length === 0 && (
+                                <div className="mt-3 text-[10px] text-[var(--foreground-muted)]">
+                                    {evalCount > 0 ? `${evalCount} evaluation${evalCount !== 1 ? 's' : ''} run` : 'No evaluations yet'}
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Total Tokens with progress bar */}
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="text-3xl font-bold text-emerald-600 tracking-tight">{(stats.totalTokens || 0).toLocaleString()}</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Total Tokens</div>
+                                </div>
+                                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
+                                    <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                    </svg>
+                                </div>
+                            </div>
+                            {/* Token usage bar */}
+                            <div className="mt-3">
+                                <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                    <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
+                                        style={{ width: `${Math.min(((stats.totalTokens || 0) / Math.max(stats.totalTokens || 1, 100000)) * 100, 100)}%` }} />
+                                </div>
+                                {koreProviders.length > 0 && (
+                                    <div className="text-[10px] text-[var(--foreground-muted)] mt-1.5">
+                                        {koreProviders.length} provider{koreProviders.length !== 1 ? 's' : ''} used
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+
+                        {/* Avg Latency with gauge */}
+                        <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
+                            <div className="flex items-start justify-between">
+                                <div>
+                                    <div className="text-3xl font-bold tracking-tight" style={{ color: latencyColor }}>
+                                        {formatLatency(stats.avgLatencyMs)}
+                                    </div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Avg Latency</div>
+                                </div>
+                                {/* Gauge arc */}
+                                <div className="relative w-10 h-10">
+                                    <svg viewBox="0 0 36 36" className="w-10 h-10" style={{ transform: 'rotate(-90deg)' }}>
+                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" strokeWidth="3.5"
+                                            strokeDasharray="66 88" />
+                                        <circle cx="18" cy="18" r="14" fill="none"
+                                            stroke={latencyColor} strokeWidth="3.5" strokeLinecap="round"
+                                            strokeDasharray={`${latencyPct * 0.66} 88`} />
+                                    </svg>
+                                    <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-[var(--foreground-muted)]">
+                                        AVG
+                                    </span>
+                                </div>
+                            </div>
+                            <div className="mt-2 flex items-center gap-2">
+                                {stats.maxLatencyMs > 0 && (
+                                    <span className="text-[10px] text-[var(--foreground-muted)]">
+                                        Max: <span className="font-mono font-medium">{formatLatency(stats.maxLatencyMs)}</span>
+                                    </span>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            })()}
 
             {/* Logs Table */}
             <div className="overflow-x-auto">
@@ -381,7 +625,7 @@ export default function LogViewer() {
                 const groupEnd = Math.min(groupStart + groupSize - 1, totalPages);
 
                 return (
-                    <div className="mt-4 flex items-center justify-between border-t border-[var(--border)] pt-4">
+                    <div className="mt-4 flex flex-col items-center gap-2 border-t border-[var(--border)] pt-4">
                         <div className="text-sm text-[var(--foreground-muted)]">
                             Showing {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalLogs)} of {totalLogs} logs
                         </div>

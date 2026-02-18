@@ -1,5 +1,5 @@
 "use client";
-import { useState, useImperativeHandle, forwardRef, useCallback, useEffect, useRef } from 'react';
+import { useState, useImperativeHandle, forwardRef, useCallback, useEffect, useRef, useMemo } from 'react';
 import { BotConfig } from './BotSettings';
 
 interface Props {
@@ -90,6 +90,42 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
         getLogs: () => logs
     }));
 
+    // Compute log numbers matching server-side llm-judge.js categorization
+    const logNumberMap = useMemo(() => {
+        const map = new Map<number, string>();
+        if (logs.length === 0) return map;
+
+        // Build index pairs: [originalIndex, log] then sort by start Date ascending
+        const indexed = logs.map((log, i) => ({ i, log }));
+        const sorted = [...indexed].sort((a, b) =>
+            new Date(a.log['start Date'] || 0).getTime() - new Date(b.log['start Date'] || 0).getTime()
+        );
+
+        // Categorize into sections using the same heuristic as server
+        const sections: { idx: number }[][] = [[], [], [], []]; // sections 1-4
+        for (const { i: origIdx, log } of sorted) {
+            const feature = (log['Feature Name '] || log.Feature || '').toLowerCase();
+            if (feature.includes('guardrail') && (feature.includes('input') || feature.includes('request'))) {
+                sections[0].push({ idx: origIdx });
+            } else if (feature.includes('guardrail') && (feature.includes('output') || feature.includes('response'))) {
+                sections[2].push({ idx: origIdx });
+            } else if (feature.includes('agent node') || feature.includes('dialog') || feature.includes('llm') || feature.includes('genai') || feature.includes('orchestrator') || feature.includes('conversation manager')) {
+                sections[1].push({ idx: origIdx });
+            } else {
+                sections[3].push({ idx: origIdx });
+            }
+        }
+
+        // Assign X.Y labels
+        sections.forEach((section, sectionIdx) => {
+            section.forEach((entry, posIdx) => {
+                map.set(entry.idx, `${sectionIdx + 1}.${posIdx + 1}`);
+            });
+        });
+
+        return map;
+    }, [logs]);
+
     return (
         <div className="card p-6 h-full flex flex-col">
             <h3 className="shrink-0 text-lg font-medium text-[var(--foreground)] mb-4 border-b pb-2 flex justify-between items-center">
@@ -130,6 +166,7 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                 <table className="min-w-full divide-y divide-[var(--border)]">
                     <thead className="bg-[var(--surface-hover)] sticky top-0">
                         <tr>
+                            <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Log #</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Timestamp</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Category</th>
                             <th className="px-3 py-2 text-left text-xs font-medium text-[var(--foreground-muted)] uppercase">Activity</th>
@@ -146,9 +183,12 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                             return (
                                 <tr
                                     key={i}
-                                    onClick={() => setSelectedLog(log)}
+                                    onClick={() => setSelectedLog({ ...log, _logNumber: logNumberMap.get(i) })}
                                     className="hover:bg-[var(--surface-hover)] cursor-pointer transition-colors"
                                 >
+                                    <td className="px-3 py-2 text-xs font-mono font-bold text-[var(--foreground-muted)]">
+                                        {logNumberMap.get(i) || '-'}
+                                    </td>
                                     <td className="px-3 py-2 text-sm text-[var(--foreground)] whitespace-nowrap">
                                         {log['start Date'] ? new Date(log['start Date']).toLocaleTimeString() : '-'}
                                     </td>
@@ -200,7 +240,14 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                     <div className="bg-[var(--surface)] rounded-lg shadow-xl w-full max-w-5xl h-[85vh] flex flex-col">
                         <div className="p-4 border-b flex justify-between items-center bg-[var(--surface-hover)] rounded-t-lg">
                             <div>
-                                <h3 className="text-lg font-medium text-[var(--foreground)]">Log Details</h3>
+                                <h3 className="text-lg font-medium text-[var(--foreground)]">
+                                    Log Details
+                                    {selectedLog._logNumber && (
+                                        <span className="ml-2 text-sm font-mono font-bold text-[var(--foreground-muted)]">
+                                            #{selectedLog._logNumber}
+                                        </span>
+                                    )}
+                                </h3>
                                 <p className="text-xs text-[var(--foreground-muted)]">{new Date(selectedLog['start Date']).toLocaleString()}</p>
                             </div>
                             <button onClick={() => setSelectedLog(null)} className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl">&times;</button>

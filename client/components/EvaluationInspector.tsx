@@ -33,7 +33,7 @@ const DEFAULT_HYPERPARAMS: Hyperparams = {
 // ── Main Component ────────────────────────────────────────────────────────
 
 export default function EvaluationInspector({ provider, model, rawResponse, result, hyperparams, onHyperparamsChange, previewPayload }: Props) {
-    const [activeTab, setActiveTab] = useState<'payload' | 'output' | 'full'>('payload');
+    const [activeTab, setActiveTab] = useState<'payload' | 'output' | 'full'>('output');
     const [showHyperparams, setShowHyperparams] = useState(false);
     const [localParams, setLocalParams] = useState<Hyperparams>(hyperparams || DEFAULT_HYPERPARAMS);
     const [expanded, setExpanded] = useState(false);

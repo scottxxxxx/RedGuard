@@ -673,13 +673,20 @@ class LLMJudge {
             rawText = textContent?.text || '';
         } else {
             // Chat Completions API
-            rawText = response.data.choices[0].message.content;
+            rawText = response.data.choices?.[0]?.message?.content || '';
         }
+
+        if (!rawText) {
+            throw new Error(`Empty response from OpenAI. Finish reason: ${response.data.choices?.[0]?.finish_reason || 'unknown'}`);
+        }
+
+        // Strip markdown fences if present (consistent with other providers)
+        let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
         const totalTokens = this._extractTokens(response.data, 'openai');
 
         return {
-            parsed: JSON.parse(rawText),
+            parsed: JSON.parse(cleanedText),
             rawText: rawText,
             fullResponse: JSON.stringify(response.data, null, 2),
             requestPayload: JSON.stringify(requestPayload, null, 2),
@@ -698,11 +705,17 @@ class LLMJudge {
             }
         });
 
-        let rawText = response.data.content[0].text;
+        // Find the text content block (may not be content[0] if thinking blocks are present)
+        const textBlock = response.data.content?.find(c => c.type === 'text');
+        let rawText = textBlock?.text || response.data.content?.[0]?.text || '';
+
+        if (!rawText) {
+            throw new Error(`Empty response from Anthropic. Stop reason: ${response.data.stop_reason || 'unknown'}`);
+        }
+
         let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
 
         const totalTokens = this._extractTokens(response.data, 'anthropic');
-
 
         return {
             parsed: JSON.parse(cleanedText),
@@ -719,10 +732,15 @@ class LLMJudge {
 
         const response = await axios.post(url, requestPayload);
 
-        let rawText = response.data.candidates[0].content.parts[0].text;
+        let rawText = response.data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+
+        if (!rawText) {
+            const finishReason = response.data.candidates?.[0]?.finishReason || 'unknown';
+            throw new Error(`Empty response from Gemini. Finish reason: ${finishReason}`);
+        }
+
         let cleanedText = rawText.replace(/```json/g, '').replace(/```/g, '').trim();
         const totalTokens = this._extractTokens(response.data, 'gemini');
-
 
         return {
             parsed: JSON.parse(cleanedText),

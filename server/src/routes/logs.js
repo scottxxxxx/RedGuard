@@ -28,8 +28,15 @@ router.get('/', async (req, res) => {
 // Get log statistics
 router.get('/stats', async (req, res) => {
     try {
-        const { startDate, endDate } = req.query;
-        const stats = await apiLogger.getStats(startDate, endDate);
+        const { logType, isError, provider, userId, startDate, endDate } = req.query;
+        const stats = await apiLogger.getStats({
+            logType,
+            isError: isError === 'true' ? true : isError === 'false' ? false : undefined,
+            provider,
+            userId,
+            startDate,
+            endDate
+        });
         res.json(stats);
     } catch (error) {
         console.error('Error fetching log stats:', error);

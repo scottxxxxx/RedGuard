@@ -426,7 +426,7 @@ function HomeContent() {
                                 className="h-16 w-auto object-contain"
                             />
                             <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.6</span>
+                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.7</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <AuthButton />
