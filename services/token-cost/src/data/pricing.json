@@ -1,0 +1,53 @@
+{
+  "currency": "USD",
+  "defaultInputOutputRatio": { "input": 0.7, "output": 0.3 },
+  "lastUpdated": "2026-02-19",
+  "providers": {
+    "anthropic": [
+      { "modelPattern": "claude-opus-4|claude-4-opus", "modelLabel": "Claude Opus 4", "inputPer1M": 15.00, "outputPer1M": 75.00 },
+      { "modelPattern": "claude-sonnet-4|claude-4-sonnet", "modelLabel": "Claude Sonnet 4", "inputPer1M": 3.00, "outputPer1M": 15.00 },
+      { "modelPattern": "claude-3-5-sonnet|claude-3.5-sonnet", "modelLabel": "Claude 3.5 Sonnet", "inputPer1M": 3.00, "outputPer1M": 15.00 },
+      { "modelPattern": "claude-3-5-haiku|claude-3.5-haiku", "modelLabel": "Claude 3.5 Haiku", "inputPer1M": 0.80, "outputPer1M": 4.00 },
+      { "modelPattern": "claude-3-opus|claude-3.0-opus", "modelLabel": "Claude 3 Opus", "inputPer1M": 15.00, "outputPer1M": 75.00 },
+      { "modelPattern": "claude-3-haiku|claude-3.0-haiku", "modelLabel": "Claude 3 Haiku", "inputPer1M": 0.25, "outputPer1M": 1.25 }
+    ],
+    "openai": [
+      { "modelPattern": "gpt-5", "modelLabel": "GPT-5", "inputPer1M": 5.00, "outputPer1M": 20.00 },
+      { "modelPattern": "gpt-4o-mini", "modelLabel": "GPT-4o Mini", "inputPer1M": 0.15, "outputPer1M": 0.60 },
+      { "modelPattern": "gpt-4o", "modelLabel": "GPT-4o", "inputPer1M": 2.50, "outputPer1M": 10.00 },
+      { "modelPattern": "gpt-4-turbo", "modelLabel": "GPT-4 Turbo", "inputPer1M": 10.00, "outputPer1M": 30.00 },
+      { "modelPattern": "gpt-4", "modelLabel": "GPT-4", "inputPer1M": 30.00, "outputPer1M": 60.00 },
+      { "modelPattern": "gpt-3\\.5-turbo|gpt-35-turbo", "modelLabel": "GPT-3.5 Turbo", "inputPer1M": 0.50, "outputPer1M": 1.50 },
+      { "modelPattern": "o1-mini", "modelLabel": "o1-mini", "inputPer1M": 3.00, "outputPer1M": 12.00 },
+      { "modelPattern": "o1-pro", "modelLabel": "o1-pro", "inputPer1M": 150.00, "outputPer1M": 600.00 },
+      { "modelPattern": "o1", "modelLabel": "o1", "inputPer1M": 15.00, "outputPer1M": 60.00 }
+    ],
+    "gemini": [
+      { "modelPattern": "gemini-2\\.0-flash|gemini-2-0-flash", "modelLabel": "Gemini 2.0 Flash", "inputPer1M": 0.10, "outputPer1M": 0.40 },
+      { "modelPattern": "gemini-1\\.5-pro|gemini-1-5-pro", "modelLabel": "Gemini 1.5 Pro", "inputPer1M": 1.25, "outputPer1M": 5.00 },
+      { "modelPattern": "gemini-1\\.5-flash|gemini-1-5-flash", "modelLabel": "Gemini 1.5 Flash", "inputPer1M": 0.075, "outputPer1M": 0.30 }
+    ],
+    "deepseek": [
+      { "modelPattern": "deepseek-reasoner|deepseek-r1", "modelLabel": "DeepSeek R1", "inputPer1M": 0.55, "outputPer1M": 2.19 },
+      { "modelPattern": "deepseek-chat|deepseek-v3", "modelLabel": "DeepSeek V3", "inputPer1M": 0.27, "outputPer1M": 1.10 }
+    ],
+    "qwen": [
+      { "modelPattern": "qwen-max", "modelLabel": "Qwen Max", "inputPer1M": 1.60, "outputPer1M": 6.40 },
+      { "modelPattern": "qwen-plus", "modelLabel": "Qwen Plus", "inputPer1M": 0.80, "outputPer1M": 3.20 },
+      { "modelPattern": "qwen-turbo|qwen2\\.5", "modelLabel": "Qwen Turbo", "inputPer1M": 0.30, "outputPer1M": 0.60 }
+    ],
+    "kimi": [
+      { "modelPattern": "moonshot-v1-128k", "modelLabel": "Moonshot V1 128K", "inputPer1M": 6.00, "outputPer1M": 6.00 },
+      { "modelPattern": "moonshot-v1-32k", "modelLabel": "Moonshot V1 32K", "inputPer1M": 2.00, "outputPer1M": 2.00 },
+      { "modelPattern": "moonshot-v1-8k|moonshot", "modelLabel": "Moonshot V1 8K", "inputPer1M": 1.00, "outputPer1M": 1.00 }
+    ]
+  },
+  "fallbackRates": {
+    "anthropic": { "inputPer1M": 3.00, "outputPer1M": 15.00 },
+    "openai": { "inputPer1M": 2.50, "outputPer1M": 10.00 },
+    "gemini": { "inputPer1M": 1.25, "outputPer1M": 5.00 },
+    "deepseek": { "inputPer1M": 0.27, "outputPer1M": 1.10 },
+    "qwen": { "inputPer1M": 0.30, "outputPer1M": 0.60 },
+    "kimi": { "inputPer1M": 1.00, "outputPer1M": 1.00 }
+  }
+}

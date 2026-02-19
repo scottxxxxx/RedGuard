@@ -335,9 +335,9 @@ export default function LogViewer() {
                                         const isFlat = diff === 0;
                                         return (
                                             <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                                isFlat ? 'bg-gray-50 text-gray-500'
-                                                    : isUp ? 'bg-emerald-50 text-emerald-600'
-                                                    : 'bg-red-50 text-red-500'
+                                                isFlat ? 'bg-gray-50 dark:bg-gray-800 text-gray-500'
+                                                    : isUp ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
+                                                    : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
                                             }`}>
                                                 <div className="flex items-center gap-0.5">
                                                     {!isFlat && (
@@ -362,9 +362,9 @@ export default function LogViewer() {
                                         const isFlat = diff === 0;
                                         return (
                                             <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                                isFlat ? 'bg-gray-50 text-gray-500'
-                                                    : isUp ? 'bg-emerald-50 text-emerald-600'
-                                                    : 'bg-red-50 text-red-500'
+                                                isFlat ? 'bg-gray-50 dark:bg-gray-800 text-gray-500'
+                                                    : isUp ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
+                                                    : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
                                             }`}>
                                                 <div className="flex items-center gap-0.5">
                                                     {!isFlat && (
@@ -390,30 +390,30 @@ export default function LogViewer() {
                                         {chatCount > 0 && <div className="bg-blue-400" style={{ width: `${(chatCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
                                         {evalCount > 0 && <div className="bg-purple-400" style={{ width: `${(evalCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
                                         {genAiCount > 0 && <div className="bg-amber-400" style={{ width: `${(genAiCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
-                                        {otherCount > 0 && <div className="bg-gray-300" style={{ width: `${(otherCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
+                                        {otherCount > 0 && <div className="bg-gray-300 dark:bg-gray-600" style={{ width: `${(otherCount / stats.totalLogs) * 100}%`, minWidth: '3px' }} />}
                                     </div>
                                     <div className="flex gap-3 mt-1.5">
                                         <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Chat</span>
                                         <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />Eval</span>
                                         <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />GenAI</span>
-                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />Other</span>
+                                        <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-500 inline-block" />Other</span>
                                     </div>
                                 </div>
                             )}
                         </div>
 
                         {/* Errors with donut */}
-                        <div className={`bg-[var(--surface)] border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow ${errorSeverity === 'critical' ? 'border-red-200 bg-red-50/30' : errorSeverity === 'medium' ? 'border-orange-200' : 'border-[var(--border)]'}`}>
+                        <div className={`bg-[var(--surface)] border rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow ${errorSeverity === 'critical' ? 'border-red-200 dark:border-red-800 bg-red-50/30 dark:bg-red-900/20' : errorSeverity === 'medium' ? 'border-orange-200 dark:border-orange-800' : 'border-[var(--border)]'}`}>
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <div className={`text-3xl font-bold tracking-tight ${stats.errorLogs > 0 ? 'text-red-600' : 'text-[var(--foreground)]'}`}>{stats.errorLogs}</div>
+                                    <div className={`text-3xl font-bold tracking-tight ${stats.errorLogs > 0 ? 'text-red-600 dark:text-red-400' : 'text-[var(--foreground)]'}`}>{stats.errorLogs}</div>
                                     <div className="flex items-center gap-2 mt-1">
                                         <span className="text-xs font-medium text-[var(--foreground-muted)]">Errors</span>
                                         <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                            errorSeverity === 'none' ? 'text-green-700 bg-green-50' :
-                                            errorSeverity === 'low' ? 'text-green-700 bg-green-50' :
-                                            errorSeverity === 'medium' ? 'text-orange-700 bg-orange-50' :
-                                            'text-red-700 bg-red-50'
+                                            errorSeverity === 'none' ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/60' :
+                                            errorSeverity === 'low' ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/60' :
+                                            errorSeverity === 'medium' ? 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/60' :
+                                            'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/60'
                                         }`}>
                                             {errorSeverity === 'none' ? 'All Clear' : errorSeverity === 'low' ? 'Low' : errorSeverity === 'medium' ? 'Elevated' : 'Critical'}
                                         </span>
@@ -422,7 +422,7 @@ export default function LogViewer() {
                                 {/* SVG donut ring */}
                                 <div className="relative w-10 h-10">
                                     <svg viewBox="0 0 36 36" className="w-10 h-10 -rotate-90">
-                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" strokeWidth="3.5" />
+                                        <circle cx="18" cy="18" r="14" fill="none" stroke="var(--border)" strokeWidth="3.5" />
                                         <circle cx="18" cy="18" r="14" fill="none"
                                             stroke={errorPct > 20 ? '#dc2626' : errorPct > 5 ? '#f59e0b' : '#059669'}
                                             strokeWidth="3.5" strokeLinecap="round"
@@ -446,13 +446,13 @@ export default function LogViewer() {
                                             {errChat > 0 && <div className="bg-blue-400" style={{ width: `${(errChat / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
                                             {errEval > 0 && <div className="bg-purple-400" style={{ width: `${(errEval / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
                                             {errGenAi > 0 && <div className="bg-amber-400" style={{ width: `${(errGenAi / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
-                                            {errOther > 0 && <div className="bg-gray-300" style={{ width: `${(errOther / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
+                                            {errOther > 0 && <div className="bg-gray-300 dark:bg-gray-600" style={{ width: `${(errOther / stats.errorLogs) * 100}%`, minWidth: '3px' }} />}
                                         </div>
                                         <div className="flex flex-wrap gap-x-3 gap-y-0.5 mt-1">
                                             {errChat > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-blue-400 inline-block" />Chat {errChat}</span>}
                                             {errEval > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-purple-400 inline-block" />Eval {errEval}</span>}
                                             {errGenAi > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-amber-400 inline-block" />GenAI {errGenAi}</span>}
-                                            {errOther > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 inline-block" />Other {errOther}</span>}
+                                            {errOther > 0 && <span className="flex items-center gap-1 text-[10px] text-[var(--foreground-muted)]"><span className="w-1.5 h-1.5 rounded-full bg-gray-300 dark:bg-gray-500 inline-block" />Other {errOther}</span>}
                                         </div>
                                         {stats.lastError && (
                                             <div className="text-[10px] text-[var(--foreground-muted)] mt-1">
@@ -482,7 +482,7 @@ export default function LogViewer() {
                                 {/* Success rate badge */}
                                 {chatCount > 0 && (
                                     <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                        stats.chatStats.errorCount === 0 ? 'bg-emerald-50 text-emerald-600' : 'bg-red-50 text-red-500'
+                                        stats.chatStats.errorCount === 0 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
                                     }`}>
                                         <span>{Math.round(((chatCount - stats.chatStats.errorCount) / chatCount) * 100)}%</span>
                                         <span className="text-[9px] font-normal text-[var(--foreground-muted)]">success</span>
@@ -501,7 +501,7 @@ export default function LogViewer() {
                                             )}
                                         </div>
                                         {stats.chatStats.errorCount > 0 && (
-                                            <div className="text-[10px] text-red-500">
+                                            <div className="text-[10px] text-red-500 dark:text-red-400">
                                                 {stats.chatStats.errorCount} failed request{stats.chatStats.errorCount !== 1 ? 's' : ''}
                                             </div>
                                         )}
@@ -518,24 +518,24 @@ export default function LogViewer() {
                                 <div>
                                     <div className={`text-3xl font-bold tracking-tight ${
                                         stats.evalOutcome.total === 0 ? 'text-[var(--foreground)]'
-                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.10 ? 'text-red-600'
-                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.05 ? 'text-amber-500'
-                                            : 'text-emerald-600'
+                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.10 ? 'text-red-600 dark:text-red-400'
+                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.05 ? 'text-amber-500 dark:text-amber-400'
+                                            : 'text-emerald-600 dark:text-emerald-400'
                                     }`}>{stats.evalOutcome.total}</div>
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Evaluation Runs</div>
                                 </div>
                                 {stats.evalOutcome.total > 0 ? (
                                     <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                        stats.evalOutcome.failed === 0 ? 'bg-emerald-50 text-emerald-600'
-                                            : stats.evalOutcome.passed === 0 ? 'bg-red-50 text-red-500'
-                                            : 'bg-amber-50 text-amber-600'
+                                        stats.evalOutcome.failed === 0 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
+                                            : stats.evalOutcome.passed === 0 ? 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
+                                            : 'bg-amber-50 dark:bg-amber-900/60 text-amber-600 dark:text-amber-300'
                                     }`}>
                                         <span>{Math.round((stats.evalOutcome.passed / stats.evalOutcome.total) * 100)}%</span>
                                         <span className="text-[9px] font-normal text-[var(--foreground-muted)]">pass rate</span>
                                     </div>
                                 ) : (
-                                    <div className="w-8 h-8 rounded-lg bg-purple-50 flex items-center justify-center">
-                                        <svg className="w-4 h-4 text-purple-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/40 flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
                                         </svg>
                                     </div>
@@ -579,11 +579,20 @@ export default function LogViewer() {
                                     <div className="text-3xl font-bold text-[var(--foreground)] tracking-tight">{(stats.totalTokens || 0).toLocaleString()}</div>
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Total Tokens</div>
                                 </div>
-                                <div className="w-8 h-8 rounded-lg bg-emerald-50 flex items-center justify-center">
-                                    <svg className="w-4 h-4 text-emerald-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
-                                    </svg>
-                                </div>
+                                {stats.costEstimate && stats.costEstimate.totalEstimate > 0 ? (
+                                    <div className="flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg bg-gray-50 dark:bg-gray-800" title={stats.costEstimate.disclaimer}>
+                                        <span className="text-xs font-mono font-semibold text-[var(--foreground)]">
+                                            {stats.costEstimate.totalEstimate < 0.01 ? '<$0.01' : `$${stats.costEstimate.totalEstimate.toFixed(2)}`}
+                                        </span>
+                                        <span className="text-[9px] font-normal text-[var(--foreground-muted)]">Est. cost</span>
+                                    </div>
+                                ) : (
+                                    <div className="w-8 h-8 rounded-lg bg-emerald-50 dark:bg-emerald-900/60 flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-emerald-500 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z" />
+                                        </svg>
+                                    </div>
+                                )}
                             </div>
                             {/* Provider token breakdown bar */}
                             <div className="mt-3">
@@ -620,7 +629,7 @@ export default function LogViewer() {
                                         );
                                     }
                                     return (
-                                        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+                                        <div className="h-1.5 bg-gray-100 dark:bg-gray-700 rounded-full overflow-hidden">
                                             <div className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-emerald-600 transition-all"
                                                 style={{ width: `${Math.min(((stats.totalTokens || 0) / Math.max(stats.totalTokens || 1, 100000)) * 100, 100)}%` }} />
                                         </div>
@@ -646,7 +655,7 @@ export default function LogViewer() {
                                 {/* Gauge arc */}
                                 <div className="relative w-10 h-10">
                                     <svg viewBox="0 0 36 36" className="w-10 h-10" style={{ transform: 'rotate(-90deg)' }}>
-                                        <circle cx="18" cy="18" r="14" fill="none" stroke="#e5e7eb" strokeWidth="3.5"
+                                        <circle cx="18" cy="18" r="14" fill="none" stroke="var(--border)" strokeWidth="3.5"
                                             strokeDasharray="66 88" />
                                         <circle cx="18" cy="18" r="14" fill="none"
                                             stroke={latencyColor} strokeWidth="3.5" strokeLinecap="round"
@@ -766,13 +775,13 @@ export default function LogViewer() {
                                                 <div className="grid grid-cols-2 gap-4">
                                                     <div>
                                                         <h4 className="font-medium text-[var(--foreground)] mb-2">Request</h4>
-                                                        <pre className="text-xs bg-white dark:bg-gray-900 text-green-600 dark:text-green-400 p-3 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap border border-[var(--border)]">
+                                                        <pre className="text-xs bg-[var(--surface)] text-green-600 dark:text-green-300 p-3 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap border border-[var(--border)]">
                                                             {log.requestBody || 'No request body'}
                                                         </pre>
                                                     </div>
                                                     <div>
                                                         <h4 className="font-medium text-[var(--foreground)] mb-2">Response</h4>
-                                                        <pre className="text-xs bg-white dark:bg-gray-900 text-blue-600 dark:text-blue-400 p-3 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap border border-[var(--border)]">
+                                                        <pre className="text-xs bg-[var(--surface)] text-blue-600 dark:text-blue-300 p-3 rounded-lg overflow-auto max-h-48 whitespace-pre-wrap border border-[var(--border)]">
                                                             {log.responseBody || 'No response body'}
                                                         </pre>
                                                     </div>

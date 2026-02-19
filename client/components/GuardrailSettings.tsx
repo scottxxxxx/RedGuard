@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useCallback } from 'react';
+import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
 
 // Custom Dialog Component
 const InfoDialog = ({ isOpen, onClose, title, message }: { isOpen: boolean; onClose: () => void; title: string; message: string }) => {
@@ -34,6 +34,10 @@ export type GuardrailPolicy = {
     bannedTopics: string;
     regexPatterns: string[];
 };
+
+export interface GuardrailSettingsHandle {
+    fetchFromBot: () => void;
+}
 
 interface Props {
     onConfigChange: (config: GuardrailPolicy) => void;
@@ -94,7 +98,7 @@ const FeatureInfoButton = ({ text, features }: { text?: string, features?: strin
     );
 };
 
-export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, botConfig, isConnected }: Props) {
+const GuardrailSettings = forwardRef<GuardrailSettingsHandle, Props>(function GuardrailSettings({ onConfigChange, onBotConfigUpdate, botConfig, isConnected }, ref) {
     const [toggles, setToggles] = useState({
         toxicity_input: true,
         toxicity_output: true,
@@ -123,6 +127,9 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
         'regex': "Discard the LLM response that contains one or more text patterns."
     });
     const [featureDetails, setFeatureDetails] = useState<Record<string, string[]>>({});
+
+    // Guardrail sync status: tracks whether config matches what's on the bot
+    const [guardrailSource, setGuardrailSource] = useState<'default' | 'fetching' | 'synced' | 'modified' | 'error'>('default');
 
     // Backup state
     const [backupStatus, setBackupStatus] = useState<'idle' | 'starting' | 'exporting' | 'extracting' | 'completed' | 'error'>('idle');
@@ -179,11 +186,17 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
         };
     }, []);
 
-    const handleFetchFromBot = async () => {
+    // Expose fetchFromBot for parent to trigger on bot connect
+    useImperativeHandle(ref, () => ({
+        fetchFromBot: handleFetchFromBot
+    }), [handleFetchFromBot]);
+
+    const handleFetchFromBot = useCallback(async () => {
         if (!botConfig?.botId || !botConfig?.clientId || !botConfig?.clientSecret) return;
 
         setBackupStatus('starting');
         setBackupError(null);
+        setGuardrailSource('fetching');
 
         try {
             const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
@@ -213,8 +226,9 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                         pollIntervalRef.current = null;
                         setBackupStatus('completed');
                         applyAnalysisResult(statusData.guardrails);
+                        setGuardrailSource('synced');
 
-                        // Auto-dismiss after 5s
+                        // Auto-dismiss backup banner after 5s
                         dismissTimerRef.current = setTimeout(() => {
                             setBackupStatus('idle');
                         }, 5000);
@@ -223,6 +237,7 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                         pollIntervalRef.current = null;
                         setBackupStatus('error');
                         setBackupError(statusData.error || 'Export failed');
+                        setGuardrailSource('error');
                     }
                     // else still in progress, keep polling
                 } catch (pollErr) {
@@ -230,13 +245,15 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                     pollIntervalRef.current = null;
                     setBackupStatus('error');
                     setBackupError('Lost connection to backup service');
+                    setGuardrailSource('error');
                 }
             }, 5000);
         } catch (err) {
             setBackupStatus('error');
             setBackupError(err instanceof Error ? err.message : String(err));
+            setGuardrailSource('error');
         }
-    };
+    }, [botConfig, applyAnalysisResult]);
 
     useEffect(() => {
         const active = Object.entries(toggles)
@@ -252,6 +269,7 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
 
     const handleToggle = (key: keyof typeof toggles) => {
         setToggles(prev => ({ ...prev, [key]: !prev[key] }));
+        if (guardrailSource === 'synced') setGuardrailSource('modified');
     };
 
     return (
@@ -356,48 +374,51 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                 </div>
             </div>
 
-            {/* Backup Status Indicator */}
-            {backupStatus !== 'idle' && (
-                <div className={`mb-3 px-3 py-2 rounded-md text-xs flex items-center gap-2 ${
-                    backupStatus === 'completed'
-                        ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                        : backupStatus === 'error'
-                            ? 'bg-amber-50 text-amber-700 border border-amber-200'
-                            : 'bg-blue-50 text-blue-700 border border-blue-200'
-                }`}>
-                    {(backupStatus === 'starting' || backupStatus === 'exporting' || backupStatus === 'extracting') && (
-                        <svg className="w-3.5 h-3.5 animate-spin" fill="none" viewBox="0 0 24 24">
-                            <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                            <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
-                        </svg>
-                    )}
-                    {backupStatus === 'completed' && (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-                        </svg>
-                    )}
-                    {backupStatus === 'error' && (
-                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
-                        </svg>
-                    )}
+            {/* Guardrail Sync Status */}
+            {guardrailSource === 'fetching' && (
+                <div className="mb-3 px-3 py-2 rounded-md text-xs flex items-center gap-2 bg-blue-50 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 border border-blue-200 dark:border-blue-800">
+                    <svg className="w-3.5 h-3.5 animate-spin shrink-0" fill="none" viewBox="0 0 24 24">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
+                    </svg>
                     <span className="flex-1">
                         {backupStatus === 'starting' && 'Initiating bot backup...'}
                         {backupStatus === 'exporting' && 'Exporting bot configuration... This may take 1-2 minutes.'}
                         {backupStatus === 'extracting' && 'Extracting guardrail settings...'}
-                        {backupStatus === 'completed' && 'Guardrails loaded from bot'}
-                        {backupStatus === 'error' && (backupError || 'An error occurred')}
+                        {!['starting', 'exporting', 'extracting'].includes(backupStatus) && 'Loading guardrails from bot...'}
                     </span>
-                    {(backupStatus === 'completed' || backupStatus === 'error') && (
-                        <button
-                            onClick={() => { setBackupStatus('idle'); setBackupError(null); }}
-                            className="text-current opacity-60 hover:opacity-100"
-                        >
-                            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
-                            </svg>
-                        </button>
-                    )}
+                </div>
+            )}
+            {guardrailSource === 'synced' && (
+                <div className="mb-3 px-3 py-2 rounded-md text-xs flex items-center gap-2 bg-emerald-50 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-300 border border-emerald-200 dark:border-emerald-800">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+                    </svg>
+                    <span className="flex-1">Guardrails synced with bot</span>
+                </div>
+            )}
+            {guardrailSource === 'modified' && (
+                <div className="mb-3 px-3 py-2 rounded-md text-xs flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <span className="flex-1">Configuration modified — may not reflect actual bot guardrails</span>
+                </div>
+            )}
+            {guardrailSource === 'error' && backupError && (
+                <div className="mb-3 px-3 py-2 rounded-md text-xs flex items-center gap-2 bg-amber-50 dark:bg-amber-900/30 text-amber-700 dark:text-amber-300 border border-amber-200 dark:border-amber-800">
+                    <svg className="w-3.5 h-3.5 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.964-.833-2.732 0L4.082 16.5c-.77.833.192 2.5 1.732 2.5z" />
+                    </svg>
+                    <span className="flex-1">{backupError}</span>
+                    <button
+                        onClick={() => { setGuardrailSource('default'); setBackupError(null); setBackupStatus('idle'); }}
+                        className="text-current opacity-60 hover:opacity-100"
+                    >
+                        <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                        </svg>
+                    </button>
                 </div>
             )}
 
@@ -441,7 +462,7 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                         <div className="ml-2 mt-2">
                             <textarea
                                 value={bannedTopics}
-                                onChange={(e) => setBannedTopics(e.target.value)}
+                                onChange={(e) => { setBannedTopics(e.target.value); if (guardrailSource === 'synced') setGuardrailSource('modified'); }}
                                 className="input w-full text-xs text-[var(--foreground)] p-2"
                                 rows={2}
                                 placeholder="Enter banned topics..."
@@ -485,7 +506,7 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
                         <div className="ml-9 mt-2">
                             <textarea
                                 value={regexPatterns}
-                                onChange={(e) => setRegexPatterns(e.target.value)}
+                                onChange={(e) => { setRegexPatterns(e.target.value); if (guardrailSource === 'synced') setGuardrailSource('modified'); }}
                                 className="input w-full text-sm font-mono text-[var(--foreground)]"
                                 rows={2}
                                 placeholder="Enter regex patterns (one per line)..."
@@ -503,4 +524,6 @@ export default function GuardrailSettings({ onConfigChange, onBotConfigUpdate, b
             />
         </div>
     );
-}
+});
+
+export default GuardrailSettings;

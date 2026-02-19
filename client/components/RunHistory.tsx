@@ -297,7 +297,9 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const visibleColumns = columnConfig.order.filter(id => columnConfig.visible.includes(id));
 
     // Data fetching
-    const fetchRuns = async () => {
+    const fetchRuns = useCallback(async () => {
+        if (!userId) return; // Don't fetch if no user ID
+
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
         try {
             const res = await fetch(`${apiUrl}/runs?userId=${userId}`);
@@ -326,9 +328,11 @@ export default function RunHistory({ botId }: RunHistoryProps) {
         } finally {
             setLoading(false);
         }
-    };
+    }, [userId]);
 
-    useEffect(() => { fetchRuns(); }, []);
+    useEffect(() => {
+        fetchRuns();
+    }, [fetchRuns]);
 
     const getRunTurns = (run: EvaluationRun) => {
         let turns = parseConversation(run.promptSent);
@@ -813,11 +817,10 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                     <button
                                         key={page}
                                         onClick={() => { setCurrentPage(page); setExpandedRow(null); }}
-                                        className={`w-7 h-7 text-xs font-medium rounded transition-colors ${
-                                            page === currentPage
+                                        className={`w-7 h-7 text-xs font-medium rounded transition-colors ${page === currentPage
                                                 ? 'bg-[var(--accent-primary,#4f46e5)] text-white'
                                                 : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
-                                        }`}
+                                            }`}
                                     >
                                         {page}
                                     </button>

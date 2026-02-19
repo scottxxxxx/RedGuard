@@ -15,6 +15,7 @@ router.use('/prompts', require('./prompts'));
 router.use('/logs', require('./logs'));
 router.use('/kore', require('./kore'));
 router.use('/attack-messages', require('./attack-messages'));
+router.use('/token-cost', require('./token-cost'));
 
 router.get('/health', (req, res) => {
     res.json({ status: 'ok' });

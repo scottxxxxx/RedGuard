@@ -1,6 +1,9 @@
 const express = require('express');
 const router = express.Router();
+const axios = require('axios');
 const apiLogger = require('../services/api-logger');
+
+const TOKEN_COST_SERVICE_URL = process.env.TOKEN_COST_SERVICE_URL || `http://localhost:${process.env.TOKEN_COST_SERVICE_PORT || 3006}`;
 
 // Get logs with filtering
 router.get('/', async (req, res) => {
@@ -38,6 +41,23 @@ router.get('/stats', async (req, res) => {
             endDate,
             last24h: last24h === 'true'
         });
+
+        // Enrich with cost estimate if token-cost microservice is available
+        if (stats.byProviderModel && stats.byProviderModel.length > 0) {
+            try {
+                const costRes = await axios.post(
+                    `${TOKEN_COST_SERVICE_URL}/api/token-cost/estimate`,
+                    { tokens: stats.byProviderModel },
+                    { timeout: 3000 }
+                );
+                stats.costEstimate = costRes.data;
+            } catch {
+                stats.costEstimate = null;
+            }
+        } else {
+            stats.costEstimate = null;
+        }
+
         res.json(stats);
     } catch (error) {
         console.error('Error fetching log stats:', error);

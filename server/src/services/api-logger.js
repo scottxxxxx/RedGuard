@@ -247,7 +247,7 @@ class ApiLogger {
         // No date filter: compute last 24h vs daily average instead of prev period
         const isUnfiltered = !currentStart && !currentEnd;
 
-        const [totalLogs, errorLogs, byType, byProvider, tokensSum, latencyAvg, chatLatency, chatErrors, evalTokensSum, errorsByType, lastError] = await Promise.all([
+        const [totalLogs, errorLogs, byType, byProvider, byProviderModel, tokensSum, latencyAvg, chatLatency, chatErrors, evalTokensSum, errorsByType, lastError] = await Promise.all([
             prisma.apiLog.count({ where }),
             prisma.apiLog.count({ where: { ...where, isError: true } }),
             prisma.apiLog.groupBy({
@@ -260,6 +260,12 @@ class ApiLogger {
                 where,
                 _count: true,
                 _avg: { latencyMs: true },
+                _sum: { totalTokens: true }
+            }),
+            prisma.apiLog.groupBy({
+                by: ['provider', 'model'],
+                where,
+                _count: true,
                 _sum: { totalTokens: true }
             }),
             prisma.apiLog.aggregate({
@@ -370,7 +376,15 @@ class ApiLogger {
                 timestamp: lastError.timestamp,
                 logType: lastError.logType,
                 errorMessage: lastError.errorMessage?.substring(0, 100)
-            } : null
+            } : null,
+            byProviderModel: byProviderModel
+                .filter(item => item.provider && item.provider !== 'kore')
+                .map(item => ({
+                    provider: item.provider,
+                    model: item.model || 'unknown',
+                    count: item._count,
+                    totalTokens: item._sum.totalTokens || 0
+                }))
         };
     }
 

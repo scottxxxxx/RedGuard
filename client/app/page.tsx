@@ -1,7 +1,7 @@
 "use client";
 import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import ChatConsole from "@/components/ChatConsole";
-import GuardrailSettings, { GuardrailPolicy } from "@/components/GuardrailSettings";
+import GuardrailSettings, { GuardrailPolicy, GuardrailSettingsHandle } from "@/components/GuardrailSettings";
 import BotSettings, { BotConfig } from "@/components/BotSettings";
 import EvaluationSettings from "@/components/EvaluationSettings";
 import EvaluationInspector from "@/components/EvaluationInspector";
@@ -52,6 +52,7 @@ function HomeContent() {
     const [hyperparams, setHyperparams] = useState<Record<string, any>>({ temperature: 0.0, max_tokens: 4096, top_p: 1.0 });
     const [koreSessionId, setKoreSessionId] = useState<string | null>(null);  // Kore's internal session ID
     const llmInspectorRef = useRef<LLMInspectorRef>(null);
+    const guardrailSettingsRef = useRef<GuardrailSettingsHandle>(null);
     const [logVersion, setLogVersion] = useState(0); // Bumped when GenAI logs are fetched
     const { showToast } = useNotification();
     const [showRequirementsModal, setShowRequirementsModal] = useState(false);
@@ -125,6 +126,11 @@ function HomeContent() {
                 timestamp: new Date()
             }]);
         }
+
+        // Auto-fetch guardrails from the connected bot
+        setTimeout(() => {
+            guardrailSettingsRef.current?.fetchFromBot();
+        }, 500);
     };
 
     // Merge policy and LLM config for the console
@@ -631,6 +637,7 @@ function HomeContent() {
                                     <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
                                         <div className="col-span-4 h-full min-h-0">
                                             <GuardrailSettings
+                                                ref={guardrailSettingsRef}
                                                 onConfigChange={setGuardrailPolicy}
                                                 onBotConfigUpdate={setBotConfig}
                                                 botConfig={botConfig}
