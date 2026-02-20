@@ -3,7 +3,7 @@ import { useState, useMemo, useEffect, useRef, useCallback } from "react";
 import ChatConsole from "@/components/ChatConsole";
 import GuardrailSettings, { GuardrailPolicy, GuardrailSettingsHandle } from "@/components/GuardrailSettings";
 import BotSettings, { BotConfig } from "@/components/BotSettings";
-import EvaluationSettings from "@/components/EvaluationSettings";
+import EvaluationSettings, { PROVIDERS, ProviderKeys } from "@/components/EvaluationSettings";
 import EvaluationInspector from "@/components/EvaluationInspector";
 import { LLMConfig } from "@/types/config";
 import BatchTester from "@/components/BatchTester";
@@ -135,11 +135,11 @@ function useEvalQuip(isActive: boolean) {
     return displayed;
 }
 
-type ViewType = 'evaluator' | 'logs';
+type ViewType = 'setup' | 'evaluator' | 'logs';
 
 function HomeContent() {
     const { userId, isAuthenticated, isLoading } = useUser();
-    const [currentView, setCurrentView] = useState<ViewType>('evaluator');
+    const [currentView, setCurrentView] = useState<ViewType>('setup');
 
     const [guardrailPolicy, setGuardrailPolicy] = useState<GuardrailPolicy | null>(null);
     const [llmConfig, setLlmConfig] = useState<LLMConfig | null>(null);
@@ -182,6 +182,30 @@ function HomeContent() {
     // Bot connection state
     const [isConnecting, setIsConnecting] = useState(false);
     const [isConnected, setIsConnected] = useState(false);
+
+    // Provider API keys (lifted from EvaluationSettings for shared access)
+    const [providerKeys, setProviderKeys] = useState<ProviderKeys>({
+        openai: '', anthropic: '', gemini: '', deepseek: '', qwen: '', kimi: ''
+    });
+    const [showKeyFor, setShowKeyFor] = useState<Record<string, boolean>>({});
+
+    // Load providerKeys from localStorage on mount
+    useEffect(() => {
+        const savedKeys = localStorage.getItem('redguard_llm_keys');
+        if (savedKeys) {
+            try {
+                setProviderKeys(prev => ({ ...prev, ...JSON.parse(savedKeys) }));
+            } catch (e) { /* ignore corrupt data */ }
+        }
+    }, []);
+
+    // Persist providerKeys to localStorage
+    useEffect(() => {
+        localStorage.setItem('redguard_llm_keys', JSON.stringify(providerKeys));
+    }, [providerKeys]);
+
+    // Auto-navigation ref to track connection transitions
+    const prevIsConnectedRef = useRef(isConnected);
 
     // Check auth before allowing interaction
     const requireAuth = useCallback((action: () => void) => {
@@ -226,6 +250,28 @@ function HomeContent() {
         }
         prevMessagesLenRef.current = messages.length;
     }, [messages]);
+
+    // Auto-navigate: bot disconnects → go back to setup view
+    useEffect(() => {
+        const wasConnected = prevIsConnectedRef.current;
+        prevIsConnectedRef.current = isConnected;
+        if (!isConnected && wasConnected) {
+            setCurrentView('setup');
+        }
+    }, [isConnected]);
+
+    // Auto-navigate: guardrails configured → go to evaluator view
+    const guardrailAutoNavRef = useRef(false);
+    useEffect(() => {
+        if (currentView === 'setup' && !guardrailAutoNavRef.current &&
+            guardrailPolicy?.activeGuardrails?.length && guardrailPolicy.activeGuardrails.length > 0) {
+            guardrailAutoNavRef.current = true;
+            const timer = setTimeout(() => {
+                setCurrentView('evaluator');
+            }, 800);
+            return () => clearTimeout(timer);
+        }
+    }, [guardrailPolicy, currentView]);
 
     const handleBotConnect = (greeting: string) => {
         // Mark as connected
@@ -363,7 +409,7 @@ function HomeContent() {
         });
 
         if (!hasGuardrailsInLogs) {
-            missingItems.push('GenAI log from bot - A guardrail must be detected in the bot log. Send a message in the Live Verification Console that triggers a guardrail interaction with an AI component (like an Agent Node)');
+            missingItems.push('GenAI log from bot - A guardrail must be detected in the bot log. Send a message in the Chat Console that triggers a guardrail interaction with an AI component (like an Agent Node)');
         }
 
         return missingItems;
@@ -535,14 +581,29 @@ function HomeContent() {
 
                 if (sseResult) {
                     await processResult(sseResult);
+                } else {
+                    // SSE stream ended without a complete or error event
+                    setEvalResult({
+                        error: 'Evaluation stream ended without a result. The LLM provider may have timed out or returned an incomplete response.',
+                        pass: false,
+                        results: []
+                    });
+                    showToast('Evaluation ended without a result — the provider may have timed out.', 'error');
                 }
             } else {
                 // Fallback: non-SSE response (e.g., 400 validation error)
                 const result = await res.json();
                 await processResult(result);
             }
-        } catch (e) {
+        } catch (e: any) {
             console.error("Evaluation failed", e);
+            const errorMsg = e?.message || 'Unknown error';
+            setEvalResult({
+                error: `Evaluation failed: ${errorMsg}`,
+                pass: false,
+                results: []
+            });
+            showToast(`Evaluation failed: ${errorMsg}`, 'error');
         } finally {
             setIsEvaluating(false);
             setEvaluateStage(null);
@@ -587,7 +648,7 @@ function HomeContent() {
                                 className="h-16 w-auto object-contain"
                             />
                             <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.4.0</span>
+                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.4.1</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <AuthButton />
@@ -634,6 +695,25 @@ function HomeContent() {
 
                     <div className="p-4 space-y-1">
 
+                        {/* Setup (Bot Connection + Guardrail Settings) */}
+                        <button
+                            onClick={() => setCurrentView('setup')}
+                            className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'setup'
+                                ? 'bg-sidebar-active text-sidebar-active-text'
+                                : 'text-foreground hover:bg-sidebar-hover'
+                                }`}
+                            title="Setup"
+                        >
+                            <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244" />
+                            </svg>
+                            <span className={`whitespace-nowrap transition-all duration-300 ${isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
+                                }`}>
+                                Setup
+                            </span>
+                        </button>
+
+                        {/* Guardrail Evaluator */}
                         <button
                             onClick={() => setCurrentView('evaluator')}
                             className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'evaluator'
@@ -643,7 +723,7 @@ function HomeContent() {
                             title="Guardrail Evaluator"
                         >
                             <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
                             </svg>
                             <span className={`whitespace-nowrap transition-all duration-300 ${isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
                                 }`}>
@@ -651,6 +731,7 @@ function HomeContent() {
                             </span>
                         </button>
 
+                        {/* System Logs */}
                         <button
                             onClick={() => setCurrentView('logs')}
                             className={`w-full flex items-center px-3 py-2 text-sm font-medium rounded-md transition-colors ${currentView === 'logs'
@@ -660,7 +741,7 @@ function HomeContent() {
                             title="System Logs"
                         >
                             <svg className={`h-5 w-5 flex-shrink-0 ${isSidebarExpanded || isSidebarHovered ? 'mr-3' : ''}`} fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 01-2-2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m0-4V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" />
                             </svg>
                             <span className={`whitespace-nowrap transition-all duration-300 ${isSidebarExpanded || isSidebarHovered ? 'opacity-100 w-auto' : 'opacity-0 w-0 overflow-hidden'
                                 }`}>
@@ -672,31 +753,17 @@ function HomeContent() {
 
                 {/* Main Content Area */}
                 <main className="flex-1 overflow-auto bg-[var(--background)] p-8 relative">
-                    {/* Auth Blocking Overlay */}
+
+                    {/* Landing Page (not authenticated) */}
                     {!isAuthenticated && !isLoading && (
-                        <div className="absolute inset-0 bg-[var(--background)]/80 backdrop-blur-[2px] z-50 flex items-center justify-center">
-                            <div className="bg-[var(--surface)] rounded-2xl shadow-2xl border-2 border-[var(--primary-500)] p-8 max-w-md text-center animate-fade-in">
-                                {/* Google Logo */}
-                                <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
-                                    <svg className="w-8 h-8" viewBox="0 0 24 24" fill="currentColor">
-                                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
-                                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853" />
-                                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05" />
-                                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335" />
-                                    </svg>
-                                </div>
+                        <div className="w-full">
+                            <RedGuardIntro />
 
-                                <h2 className="text-2xl font-bold text-[var(--foreground)] mb-3">
-                                    Welcome to RedGuard
-                                </h2>
-
-                                <p className="text-sm text-[var(--foreground-muted)] mb-6 leading-relaxed">
-                                    Sign in with your Google account to configure bots, test guardrails, and save your evaluation history.
-                                </p>
-
+                            {/* Sign-in CTA */}
+                            <div className="flex justify-center mt-8 mb-12 animate-fade-in">
                                 <button
                                     onClick={() => signIn('google')}
-                                    className="w-full flex items-center justify-center gap-3 px-6 py-3.5 text-base font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-xl transition-all shadow-lg hover:shadow-xl hover:scale-105"
+                                    className="flex items-center gap-3 px-8 py-4 text-base font-semibold text-white bg-[var(--primary-600)] hover:bg-[var(--primary-700)] rounded-xl transition-all shadow-lg hover:shadow-xl hover:scale-105"
                                 >
                                     <svg className="w-5 h-5" viewBox="0 0 24 24" fill="currentColor">
                                         <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4" />
@@ -710,9 +777,96 @@ function HomeContent() {
                         </div>
                     )}
 
-                    {/* Evaluator View */}
-                    <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
-                        <RedGuardIntro />
+                    {/* Setup View: Bot Connection + Guardrail Settings side by side (authenticated only) */}
+                    {isAuthenticated && <div className={`w-full ${currentView === 'setup' ? '' : 'hidden'}`}>
+                        <header className="mb-6">
+                            <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">Setup</h1>
+                            <p className="text-sm text-[var(--foreground-muted)]">Connect your Kore.ai bot and configure guardrail policies.</p>
+                        </header>
+
+                        {/* Bot Connection + Guardrail Settings */}
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                            <div>
+                                <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-muted)] mb-3">Bot Connection</h2>
+                                <BotSettings
+                                    onConfigChange={setBotConfig}
+                                    onConnect={handleBotConnect}
+                                    onSessionReset={handleSessionReset}
+                                    onClearConsole={handleClearConsole}
+                                    onKoreSessionUpdate={setKoreSessionId}
+                                    onConnectingChange={setIsConnecting}
+                                    userId={userId}
+                                    isAuthenticated={isAuthenticated}
+                                    onAuthRequired={() => setShowSignInModal(true)}
+                                />
+                            </div>
+                            <div>
+                                <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-muted)] mb-3">Guardrail Settings</h2>
+                                <GuardrailSettings
+                                    ref={guardrailSettingsRef}
+                                    onConfigChange={setGuardrailPolicy}
+                                    onBotConfigUpdate={setBotConfig}
+                                    botConfig={botConfig}
+                                    isConnected={isConnected}
+                                />
+                            </div>
+                        </div>
+
+                        {/* API Key Management */}
+                        <div className="mt-8">
+                            <h2 className="text-sm font-semibold uppercase tracking-wider text-[var(--foreground-muted)] mb-1">LLM Provider API Keys</h2>
+                            <p className="text-xs text-[var(--foreground-muted)] mb-4">
+                                Keys are stored in your browser and are only visible to you. They auto-populate in the Guardrail Evaluator for the matching provider.
+                            </p>
+                            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                                {(Object.entries(PROVIDERS) as [string, { name: string }][]).map(([key, info]) => {
+                                    const val = providerKeys[key] || '';
+                                    const isVisible = showKeyFor[key] || false;
+                                    return (
+                                        <div key={key} className="card p-4">
+                                            <label className="text-xs font-medium text-[var(--foreground-muted)] uppercase tracking-wide mb-1.5 block">
+                                                {info.name}
+                                            </label>
+                                            <div className="flex items-center gap-2">
+                                                <input
+                                                    type={isVisible ? 'text' : 'password'}
+                                                    value={val}
+                                                    onChange={(e) => setProviderKeys(prev => ({ ...prev, [key]: e.target.value }))}
+                                                    placeholder={`Enter ${info.name} key...`}
+                                                    className="input w-full text-sm"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    onClick={() => setShowKeyFor(prev => ({ ...prev, [key]: !isVisible }))}
+                                                    className="p-2 text-[var(--foreground-muted)] hover:text-[var(--foreground)] transition-colors flex-shrink-0"
+                                                    title={isVisible ? 'Hide key' : 'Show key'}
+                                                >
+                                                    {isVisible ? (
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-8.268-2.943-9.543-7a9.97 9.97 0 011.563-3.029m5.858.908a3 3 0 114.243 4.243M9.878 9.878l4.242 4.242M9.878 9.878L6.59 6.59m7.532 7.532l3.29 3.29M3 3l18 18" />
+                                                        </svg>
+                                                    ) : (
+                                                        <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+                                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" />
+                                                        </svg>
+                                                    )}
+                                                </button>
+                                            </div>
+                                            {val && (
+                                                <p className="text-[10px] text-green-600 mt-1 font-mono">
+                                                    Loaded: ...{val.slice(-5)}
+                                                </p>
+                                            )}
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+                    </div>}
+
+                    {/* Evaluator View (authenticated only) */}
+                    {isAuthenticated && <div className={`w-full ${currentView === 'evaluator' ? '' : 'hidden'}`}>
 
 
                         {/* Tab Headers */}
@@ -725,7 +879,7 @@ function HomeContent() {
                                         : 'border-transparent text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:border-[var(--border)]'
                                         } whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm`}
                                 >
-                                    Live Verification Console
+                                    Chat Console
                                 </button>
                                 <button
                                     onClick={() => setActiveTab('batch')}
@@ -742,77 +896,45 @@ function HomeContent() {
                         {/* Live Tab Content */}
                         <div className={activeTab === 'live' ? '' : 'hidden'}>
                             <div className="space-y-6">
-                                {/* Row 1: Bot Config & Chat Console */}
+                                {/* Workspace: Chat Console + GenAI Logs with Drawer Panels */}
                                 <div>
-                                    <div className="mb-3">
-                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Setup Connection</h3>
-                                        <p className="text-xs text-[var(--foreground-muted)]">Connect your bot, chat to test responses, and generate adversarial attacks.</p>
-                                    </div>
-                                    <div className="grid grid-cols-12 gap-6" style={{ height: '600px' }}>
-                                        <div className="col-span-4 h-full min-h-0">
-                                            <BotSettings
-                                                onConfigChange={setBotConfig}
-                                                onConnect={handleBotConnect}
-                                                onSessionReset={handleSessionReset}
-                                                onClearConsole={handleClearConsole}
-                                                onKoreSessionUpdate={setKoreSessionId}
-                                                onConnectingChange={setIsConnecting}
-                                                userId={userId}
-                                                isAuthenticated={isAuthenticated}
-                                                onAuthRequired={() => setShowSignInModal(true)}
-                                            />
+                                    <div className="relative overflow-hidden rounded-xl" style={{ height: '600px' }}>
+                                        {/* Main content: Chat + Logs side by side */}
+                                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 h-full">
+                                            <div className="h-full min-h-0">
+                                                <ChatConsole
+                                                    config={fullGuardrailConfig}
+                                                    botConfig={botConfig}
+                                                    onInteractionUpdate={handleInteractionUpdate}
+                                                    messages={messages}
+                                                    setMessages={setMessages}
+                                                    userId={userId}
+                                                    koreSessionId={koreSessionId}
+                                                    onSessionReset={handleSessionReset}
+                                                    onBotResponse={handleBotResponse}
+                                                    onKoreSessionUpdate={setKoreSessionId}
+                                                    isAuthenticated={isAuthenticated}
+                                                    onAuthRequired={() => setShowSignInModal(true)}
+                                                    isConnecting={isConnecting}
+                                                    isConnected={isConnected}
+                                                />
+                                            </div>
+                                            <div className="h-full min-h-0">
+                                                <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} onLogsUpdated={() => setLogVersion(v => v + 1)} messages={messages} />
+                                            </div>
                                         </div>
-                                        <div className="col-span-8 h-full min-h-0">
-                                            <ChatConsole
-                                                config={fullGuardrailConfig}
-                                                botConfig={botConfig}
-                                                onInteractionUpdate={handleInteractionUpdate}
-                                                messages={messages}
-                                                setMessages={setMessages}
-                                                userId={userId}
-                                                koreSessionId={koreSessionId}
-                                                onSessionReset={handleSessionReset}
-                                                onBotResponse={handleBotResponse}
-                                                onKoreSessionUpdate={setKoreSessionId}
-                                                isAuthenticated={isAuthenticated}
-                                                onAuthRequired={() => setShowSignInModal(true)}
-                                                isConnecting={isConnecting}
-                                                isConnected={isConnected}
-                                            />
-                                        </div>
+
                                     </div>
                                 </div>
 
-                                {/* Row 2: Guardrail Config & Kore Logs */}
-                                <div>
-                                    <div className="mb-3 mt-2">
-                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Define guardrails</h3>
-                                        <p className="text-xs text-[var(--foreground-muted)]">Set your safety policies and inspect real-time system logs.</p>
-                                    </div>
-                                    <div className="grid grid-cols-12 gap-6" style={{ height: '600px' }}>
-                                        <div className="col-span-4 h-full min-h-0">
-                                            <GuardrailSettings
-                                                ref={guardrailSettingsRef}
-                                                onConfigChange={setGuardrailPolicy}
-                                                onBotConfigUpdate={setBotConfig}
-                                                botConfig={botConfig}
-                                                isConnected={isConnected}
-                                            />
-                                        </div>
-                                        <div className="col-span-8 h-full min-h-0">
-                                            <LLMInspector ref={llmInspectorRef} botConfig={botConfig} userId={userId} koreSessionId={koreSessionId} onLogsUpdated={() => setLogVersion(v => v + 1)} />
-                                        </div>
-                                    </div>
-                                </div>
-
-                                {/* Row 3: Evaluation Settings & Inspector */}
+                                {/* Evaluation Settings & Inspector */}
                                 <div>
                                     <div className="mb-3 mt-2">
                                         <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Test & Evaluate</h3>
                                         <p className="text-xs text-[var(--foreground-muted)]">Use predefined guardrail prompts or create custom ones, run evaluations, and analyze results.</p>
                                     </div>
                                     <div className="grid grid-cols-12 gap-6">
-                                        <div className="col-span-4">
+                                        <div className="col-span-3">
                                             <EvaluationSettings
                                                 onConfigChange={setLlmConfig}
                                                 onPromptTemplateChange={() => {
@@ -821,9 +943,11 @@ function HomeContent() {
                                                     setPreviewPayload(null);
                                                     setPreviewSystemPrompt(null);
                                                 }}
+                                                providerKeys={providerKeys}
+                                                onProviderKeysChange={setProviderKeys}
                                             />
                                         </div>
-                                        <div className="col-span-8">
+                                        <div className="col-span-9">
                                             <EvaluationInspector
                                                 provider={llmConfig?.provider}
                                                 model={llmConfig?.model}
@@ -939,36 +1063,11 @@ function HomeContent() {
                                 guardrailConfig={fullGuardrailConfig}
                             />
 
-                            {/* Auth Overlay for Batch Tab */}
-                            {!isAuthenticated && !isLoading && (
-                                <div
-                                    className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer rounded-lg"
-                                    onClick={() => setShowSignInModal(true)}
-                                >
-                                    <div className="flex items-center justify-center h-full">
-                                        <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
-                                            <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
-                                                <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                                    <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                                    <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                                </svg>
-                                            </div>
-                                            <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to use Batch Tester</h3>
-                                            <p className="text-sm text-[var(--foreground-muted)] mb-4">
-                                                Authentication required to run batch tests and save results.
-                                            </p>
-                                            <button className="btn-primary px-6 py-2.5 text-sm font-medium">
-                                                Click to sign in
-                                            </button>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
                         </div>
-                    </div>
+                    </div>}
 
-                    {/* Logs View */}
-                    <div className={`w-full relative ${currentView === 'logs' ? '' : 'hidden'}`}>
+                    {/* Logs View (authenticated only) */}
+                    {isAuthenticated && <div className={`w-full relative ${currentView === 'logs' ? '' : 'hidden'}`}>
                         <header className="mb-8">
                             <h1 className="text-2xl font-semibold text-[var(--foreground)] mb-1">System Logs</h1>
                             <p className="text-sm text-[var(--foreground-muted)]">View real-time backend and application logs</p>
@@ -980,34 +1079,7 @@ function HomeContent() {
                                 <LogViewer />
                             </div>
                         </div>
-
-                        {/* Auth Overlay for Logs View */}
-                        {!isAuthenticated && !isLoading && (
-                            <div
-                                className="absolute inset-0 bg-black/5 backdrop-blur-[2px] z-40 cursor-pointer"
-                                onClick={() => setShowSignInModal(true)}
-                                style={{ top: '120px' }} // Positioned below header
-                            >
-                                <div className="flex items-start justify-center pt-12">
-                                    <div className="bg-[var(--surface)] border-2 border-[var(--primary-500)] rounded-xl shadow-2xl p-6 max-w-md text-center">
-                                        <div className="w-12 h-12 mx-auto mb-3 rounded-full bg-[var(--primary-50)] flex items-center justify-center">
-                                            <svg className="w-6 h-6 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24" strokeWidth="2">
-                                                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                                                <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                                            </svg>
-                                        </div>
-                                        <h3 className="text-lg font-semibold text-[var(--foreground)] mb-2">Sign in to view logs</h3>
-                                        <p className="text-sm text-[var(--foreground-muted)] mb-4">
-                                            Authentication required to access system logs and diagnostic information.
-                                        </p>
-                                        <button className="btn-primary px-6 py-2.5 text-sm font-medium">
-                                            Click to sign in
-                                        </button>
-                                    </div>
-                                </div>
-                            </div>
-                        )}
-                    </div>
+                    </div>}
                 </main>
             </div>
         </div>

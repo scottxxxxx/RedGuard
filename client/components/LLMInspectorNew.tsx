@@ -3,11 +3,20 @@ import { useState, useImperativeHandle, forwardRef, useCallback, useEffect, useR
 import { createPortal } from 'react-dom';
 import { BotConfig } from './BotSettings';
 
+export interface ChatMessage {
+    role: 'user' | 'bot' | 'evaluation';
+    text: string;
+    timestamp?: Date;
+    isAttack?: boolean;
+    attackCategory?: string;
+}
+
 interface Props {
     botConfig: BotConfig | null;
     userId?: string;
     koreSessionId?: string | null;  // Kore's internal session ID for filtering logs
     onLogsUpdated?: () => void;  // Called when logs are fetched/updated
+    messages?: ChatMessage[];  // Chat messages for attack correlation
 }
 
 export interface LLMInspectorRef {
@@ -26,11 +35,31 @@ function getLogPriority(log: any): number {
     return 3;
 }
 
-const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, koreSessionId, onLogsUpdated }, ref) => {
+// Check if a guardrail response payload indicates the guardrail caught/blocked something
+function didGuardrailCatch(log: any): boolean {
+    try {
+        const resp = log['Payload Details']?.['Response Payload'] || log['Response Payload'];
+        if (!resp) return false;
+        const text = typeof resp === 'string' ? resp : JSON.stringify(resp);
+        const lower = text.toLowerCase();
+        // Detection signals: violations found, blocked, denied, flagged, safety triggered
+        return lower.includes('"violation') || lower.includes('"blocked"') ||
+            lower.includes('"denied"') || lower.includes('"flagged": true') ||
+            lower.includes('"flagged":true') || lower.includes('"safety"') ||
+            lower.includes('violation detected') || lower.includes('content blocked') ||
+            lower.includes('"status":"denied"') || lower.includes('"status": "denied"') ||
+            lower.includes('"action":"deny"') || lower.includes('"action": "deny"');
+    } catch {
+        return false;
+    }
+}
+
+const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, koreSessionId, onLogsUpdated, messages = [] }, ref) => {
     const [logs, setLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [selectedLogIndex, setSelectedLogIndex] = useState<number | null>(null);
+    const [copiedField, setCopiedField] = useState<string | null>(null);
     // Keyboard navigation for log detail modal
     useEffect(() => {
         if (selectedLogIndex === null) return;
@@ -157,8 +186,54 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
         return map;
     }, [sortedLogs]);
 
+    // Map each log to its attack status: 'caught' | 'missed' | null
+    // Correlates logs with attack messages by timestamp windows
+    const logAttackStatus = useMemo(() => {
+        const statusMap = new Map<number, 'caught' | 'missed'>();
+        if (sortedLogs.length === 0 || messages.length === 0) return statusMap;
+
+        // Get user messages with timestamps, sorted chronologically
+        const userMsgs = messages
+            .filter(m => m.role === 'user' && m.timestamp)
+            .map(m => ({ time: new Date(m.timestamp!).getTime(), isAttack: !!m.isAttack, category: m.attackCategory }));
+
+        if (userMsgs.length === 0) return statusMap;
+
+        for (let i = 0; i < sortedLogs.length; i++) {
+            const log = sortedLogs[i];
+            const logTime = new Date(log['start Date'] || 0).getTime();
+            const isGuardrail = (log['Feature Name '] || log.Feature || '').toLowerCase().includes('guardrail');
+
+            if (!isGuardrail) continue;
+
+            // Find which user message this log belongs to (latest message before this log)
+            let matchedMsg = null;
+            for (let j = userMsgs.length - 1; j >= 0; j--) {
+                if (userMsgs[j].time <= logTime) {
+                    matchedMsg = userMsgs[j];
+                    break;
+                }
+            }
+
+            if (matchedMsg && matchedMsg.isAttack) {
+                statusMap.set(i, didGuardrailCatch(log) ? 'caught' : 'missed');
+            }
+        }
+
+        return statusMap;
+    }, [sortedLogs, messages]);
+
+    const copyToClipboard = useCallback(async (content: any, fieldName: string) => {
+        try {
+            const text = typeof content === 'string' ? content : JSON.stringify(content, null, 2);
+            await navigator.clipboard.writeText(text);
+            setCopiedField(fieldName);
+            setTimeout(() => setCopiedField(null), 2000);
+        } catch { /* clipboard API unavailable */ }
+    }, []);
+
     const selectedLog = selectedLogIndex !== null && sortedLogs[selectedLogIndex]
-        ? { ...sortedLogs[selectedLogIndex], _logNumber: logNumberMap.get(selectedLogIndex) }
+        ? { ...sortedLogs[selectedLogIndex], _logNumber: logNumberMap.get(selectedLogIndex), _attackStatus: logAttackStatus.get(selectedLogIndex) }
         : null;
 
     return (
@@ -214,15 +289,25 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                             const description = log.Description || '-';
                             const model = log.Integration || log['Model Name'] || log.Model || '-';
                             const isGuardrail = feature.toLowerCase().includes('guardrail');
+                            const attackStatus = logAttackStatus.get(i);
 
                             return (
                                 <tr
                                     key={i}
                                     onClick={() => setSelectedLogIndex(i)}
-                                    className="hover:bg-[var(--surface-hover)] cursor-pointer transition-colors"
+                                    className={`cursor-pointer transition-colors ${attackStatus === 'caught'
+                                        ? 'bg-[var(--success-bg)] hover:bg-[var(--success-bg)] border-l-4 border-l-[var(--success-text)]'
+                                        : attackStatus === 'missed'
+                                            ? 'bg-[var(--error-bg)] hover:bg-[var(--error-bg)] border-l-4 border-l-[var(--error-text)]'
+                                            : 'hover:bg-[var(--surface-hover)]'
+                                        }`}
                                 >
                                     <td className="px-3 py-2 text-xs font-mono font-bold text-[var(--foreground-muted)]">
-                                        {logNumberMap.get(i) || '-'}
+                                        <span className="flex items-center gap-1.5">
+                                            {logNumberMap.get(i) || '-'}
+                                            {attackStatus === 'caught' && <span title="Guardrail caught the attack" className="w-2 h-2 rounded-full bg-[var(--success-text)] inline-block" />}
+                                            {attackStatus === 'missed' && <span title="Guardrail missed the attack" className="w-2 h-2 rounded-full bg-[var(--error-text)] inline-block" />}
+                                        </span>
                                     </td>
                                     <td className="px-3 py-2 text-sm text-[var(--foreground)] whitespace-nowrap">
                                         {log['start Date'] ? new Date(log['start Date']).toLocaleTimeString() : '-'}
@@ -269,11 +354,21 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                     <div className="bg-[var(--surface)] rounded-lg shadow-xl w-full max-w-5xl h-[85vh] flex flex-col">
                         <div className="p-4 border-b flex justify-between items-center bg-[var(--surface-hover)] rounded-t-lg">
                             <div>
-                                <h3 className="text-lg font-medium text-[var(--foreground)]">
+                                <h3 className="text-lg font-medium text-[var(--foreground)] flex items-center gap-2">
                                     Log Details
                                     {selectedLog._logNumber && (
-                                        <span className="ml-2 text-sm font-mono font-bold text-[var(--foreground-muted)]">
+                                        <span className="text-sm font-mono font-bold text-[var(--foreground-muted)]">
                                             #{selectedLog._logNumber}
+                                        </span>
+                                    )}
+                                    {selectedLog._attackStatus === 'caught' && (
+                                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--success-bg)] text-[var(--success-text)] border border-[var(--success-border)]">
+                                            Attack Caught
+                                        </span>
+                                    )}
+                                    {selectedLog._attackStatus === 'missed' && (
+                                        <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-[var(--error-bg)] text-[var(--error-text)] border border-[var(--error-border)]">
+                                            Attack Missed
                                         </span>
                                     )}
                                 </h3>
@@ -325,8 +420,19 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                             </div>
 
                             <div>
-                                <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center gap-2">
+                                <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center justify-between">
                                     <span>📤 Request Payload (Sent to LLM)</span>
+                                    <button
+                                        onClick={() => copyToClipboard(selectedLog['Payload Details']?.['Request Payload'] || selectedLog['Request Payload'], 'request')}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
+                                        title="Copy request payload"
+                                    >
+                                        {copiedField === 'request' ? (
+                                            <><svg className="w-3.5 h-3.5 text-[var(--success-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg><span className="text-[var(--success-text)]">Copied</span></>
+                                        ) : (
+                                            <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy</>
+                                        )}
+                                    </button>
                                 </h4>
                                 <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[400px] border border-gray-700 shadow-inner language-json whitespace-pre-wrap break-words">
                                     {JSON.stringify(selectedLog['Payload Details']?.['Request Payload'] || selectedLog['Request Payload'], null, 2)}
@@ -334,8 +440,19 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                             </div>
 
                             <div>
-                                <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center gap-2">
+                                <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center justify-between">
                                     <span>📥 Response Payload (From LLM)</span>
+                                    <button
+                                        onClick={() => copyToClipboard(selectedLog['Payload Details']?.['Response Payload'] || selectedLog['Response Payload'], 'response')}
+                                        className="flex items-center gap-1 px-2 py-1 text-xs rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] transition-colors"
+                                        title="Copy response payload"
+                                    >
+                                        {copiedField === 'response' ? (
+                                            <><svg className="w-3.5 h-3.5 text-[var(--success-text)]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" /></svg><span className="text-[var(--success-text)]">Copied</span></>
+                                        ) : (
+                                            <><svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" /></svg>Copy</>
+                                        )}
+                                    </button>
                                 </h4>
                                 <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[300px] border border-gray-700 shadow-inner language-json whitespace-pre-wrap break-words">
                                     {JSON.stringify(selectedLog['Payload Details']?.['Response Payload'] || selectedLog['Response Payload'], null, 2)}

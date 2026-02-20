@@ -4,9 +4,13 @@ import { LLMConfig } from '../types/config';
 import PromptEditorModal from './PromptEditorModal';
 import { useNotification } from '../context/NotificationContext';
 
+export type ProviderKeys = Record<string, string>;
+
 interface Props {
     onConfigChange: (config: LLMConfig) => void;
     onPromptTemplateChange?: () => void;
+    providerKeys?: ProviderKeys;
+    onProviderKeysChange?: (keys: ProviderKeys) => void;
 }
 
 const PROVIDERS = {
@@ -46,9 +50,14 @@ const PROVIDERS = {
     }
 };
 
-export default function EvaluationSettings({ onConfigChange, onPromptTemplateChange }: Props) {
+export { PROVIDERS };
+
+export default function EvaluationSettings({ onConfigChange, onPromptTemplateChange, providerKeys, onProviderKeysChange }: Props) {
     const [provider, setProvider] = useState<keyof typeof PROVIDERS>('anthropic');
-    const [keys, setKeys] = useState({
+
+    // Use external keys if provided, otherwise manage internally
+    const isControlled = !!providerKeys && !!onProviderKeysChange;
+    const [internalKeys, setInternalKeys] = useState({
         openai: '',
         anthropic: '',
         gemini: '',
@@ -56,14 +65,22 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
         qwen: '',
         kimi: ''
     });
+    const keys = isControlled ? providerKeys as typeof internalKeys : internalKeys;
+    const setKeys = isControlled
+        ? (updater: ((prev: typeof internalKeys) => typeof internalKeys) | typeof internalKeys) => {
+            const newKeys = typeof updater === 'function' ? updater(keys as typeof internalKeys) : updater;
+            onProviderKeysChange!(newKeys);
+        }
+        : setInternalKeys;
 
-    // Load keys from localStorage on mount
+    // Load keys from localStorage on mount (only when uncontrolled)
     useEffect(() => {
+        if (isControlled) return;
         const savedKeys = localStorage.getItem('redguard_llm_keys');
         if (savedKeys) {
             try {
                 const parsed = JSON.parse(savedKeys);
-                setKeys(prev => ({ ...prev, ...parsed }));
+                setInternalKeys(prev => ({ ...prev, ...parsed }));
             } catch (e) {
                 console.error("Failed to parse saved keys", e);
             }
@@ -75,10 +92,20 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
         }
     }, []);
 
-    // Save keys to localStorage when they change
+    // Load saved provider on mount when controlled (keys already come from props)
     useEffect(() => {
-        localStorage.setItem('redguard_llm_keys', JSON.stringify(keys));
-    }, [keys]);
+        if (!isControlled) return;
+        const savedProvider = localStorage.getItem('redguard_llm_provider');
+        if (savedProvider && PROVIDERS[savedProvider as keyof typeof PROVIDERS]) {
+            setProvider(savedProvider as keyof typeof PROVIDERS);
+        }
+    }, []);
+
+    // Save keys to localStorage when they change (only when uncontrolled)
+    useEffect(() => {
+        if (isControlled) return;
+        localStorage.setItem('redguard_llm_keys', JSON.stringify(internalKeys));
+    }, [internalKeys]);
 
     // Save provider to localStorage when it changes
     useEffect(() => {
@@ -111,9 +138,16 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
 
     // Track previous provider|model to auto-load model-specific default on switch
     const prevModelRef = useRef<string>('');
+    // Ref to skip auto-load during initial localStorage-driven provider/model settling
+    const initializedRef = useRef(false);
     const [currentPromptId, setCurrentPromptId] = useState<string | null>(null);
     const [defaultTemplates, setDefaultTemplates] = useState<{ key: string; name: string; description?: string }[]>([]);
     const [selectedDefaultKey, setSelectedDefaultKey] = useState<string>('default_evaluation');
+
+    // Persist selected template key to localStorage
+    useEffect(() => {
+        localStorage.setItem('redguard_selected_template', selectedDefaultKey);
+    }, [selectedDefaultKey]);
 
     useEffect(() => {
         onConfigChange({
@@ -157,7 +191,15 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
     useEffect(() => {
         fetchSavedPrompts();
         fetchDefaultTemplates();
-        handleLoadDefault();
+        // Load persisted template selection, or fall back to model-auto-detect
+        const savedTemplateKey = localStorage.getItem('redguard_selected_template');
+        if (savedTemplateKey) {
+            handleLoadDefaultByKey(savedTemplateKey);
+        } else {
+            handleLoadDefault();
+        }
+        // Mark initialized after a frame so localStorage-driven provider/model changes settle first
+        requestAnimationFrame(() => { initializedRef.current = true; });
     }, []);
 
     const fetchSavedPrompts = async () => {
@@ -206,9 +248,11 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
     };
 
     // Auto-load model-specific default when provider/model changes (only if on default template)
+    // Skip during initial mount — localStorage-driven provider/model changes should not
+    // overwrite the persisted template selection (prevents flicker race condition)
     useEffect(() => {
         const key = `${provider}|${model}`;
-        if (prevModelRef.current && prevModelRef.current !== key) {
+        if (prevModelRef.current && prevModelRef.current !== key && initializedRef.current) {
             if (currentPromptId === null) {
                 handleLoadDefault(provider, model);
                 onPromptTemplateChange?.();

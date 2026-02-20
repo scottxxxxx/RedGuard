@@ -203,7 +203,7 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
                     </svg>
                 </div>
                 <h3 className="text-base font-semibold text-[var(--foreground)]">
-                    Live Verification Console
+                    Chat Console
                 </h3>
             </div>
 
