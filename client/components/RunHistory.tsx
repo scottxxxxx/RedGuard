@@ -296,6 +296,21 @@ export default function RunHistory({ botId }: RunHistoryProps) {
 
     const visibleColumns = columnConfig.order.filter(id => columnConfig.visible.includes(id));
 
+    // Memoize parsed turns for visible runs to prevent heavy regex parsing on every render
+    const runTurnsMap = React.useMemo(() => {
+        const map = new Map<string, { role: 'user' | 'bot'; content: string }[]>();
+        const visibleRuns = runs.slice((currentPage - 1) * pageSize, currentPage * pageSize);
+
+        visibleRuns.forEach(run => {
+            let turns = parseConversation(run.promptSent);
+            if (turns.length === 0 && (run.userInput.includes('User:') || run.userInput.includes('Bot:'))) {
+                turns = parseConversation(run.userInput);
+            }
+            map.set(run.id, turns);
+        });
+        return map;
+    }, [runs, currentPage, pageSize]);
+
     // Data fetching
     const fetchRuns = useCallback(async () => {
         if (!userId) return; // Don't fetch if no user ID
@@ -333,14 +348,6 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     useEffect(() => {
         fetchRuns();
     }, [fetchRuns]);
-
-    const getRunTurns = (run: EvaluationRun) => {
-        let turns = parseConversation(run.promptSent);
-        if (turns.length === 0 && (run.userInput.includes('User:') || run.userInput.includes('Bot:'))) {
-            turns = parseConversation(run.userInput);
-        }
-        return turns;
-    };
 
     const clearAllRuns = async () => {
         if (!confirm('Are you sure you want to clear all run history?')) return;
@@ -658,7 +665,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                         </thead>
                         <tbody>
                             {runs.slice((currentPage - 1) * pageSize, currentPage * pageSize).map((run) => {
-                                const turns = getRunTurns(run);
+                                const turns = runTurnsMap.get(run.id) || [];
                                 const turnCount = Math.max(turns.filter(t => t.role === 'user').length, 1);
 
                                 return (
@@ -818,8 +825,8 @@ export default function RunHistory({ botId }: RunHistoryProps) {
                                         key={page}
                                         onClick={() => { setCurrentPage(page); setExpandedRow(null); }}
                                         className={`w-7 h-7 text-xs font-medium rounded transition-colors ${page === currentPage
-                                                ? 'bg-[var(--accent-primary,#4f46e5)] text-white'
-                                                : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
+                                            ? 'bg-[var(--accent-primary,#4f46e5)] text-white'
+                                            : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
                                             }`}
                                     >
                                         {page}

@@ -24,6 +24,117 @@ export type CompositeGuardrailConfig = GuardrailPolicy & {
     llmConfig: LLMConfig;
 };
 
+// Fun loading quips shown while waiting for the LLM judge
+const EVAL_QUIPS = [
+    // Original classics
+    'Percolating...',
+    'Simmering...',
+    'Ruminating...',
+    'Drafting...',
+    'Digging...',
+    'Ducking...',
+    'Dodging...',
+    'Sifting...',
+    'Mulling...',
+    'Brewing...',
+    'Churning...',
+    'Noodling...',
+    'Pondering...',
+    'Marinating...',
+    'Tumbling...',
+    'Perusing...',
+    'Distilling...',
+    'Fermenting...',
+    'Rummaging...',
+    'Tinkering...',
+    'Wrangling...',
+    'Concocting...',
+    'Untangling...',
+    'Deciphering...',
+    'Galvanizing...',
+    // Movie-inspired
+    'Just keep swimming...',       // Finding Nemo
+    'To infinity and...',          // Toy Story
+    'Falling with style...',       // Toy Story
+    'Compacting...',               // WALL-E
+    'Wayfinding...',               // Moana
+    'Assembling...',               // Avengers
+    'Suiting up...',               // The Incredibles
+    'Layering the onion...',       // Shrek
+    'Pixie dusting...',            // Peter Pan
+    'Bibbidi-bobbidi...',          // Cinderella
+    'Remembering...',              // Coco
+    'Investigating...',            // Zootopia
+    'Whistling while working...',  // Snow White
+    'Wishing upon a star...',      // Pinocchio
+    'Reducing the sauce...',       // Ratatouille
+    'Thawing...',                  // Frozen
+    'Inflating...',                // Up
+    'Enchanting...',               // Disney vibes
+    'Sprouting...',                // WALL-E
+    'Scheming...',                 // Despicable Me
+    // More fun words
+    'Perambulating...',
+    'Bamboozling...',
+    'Fluffing...',
+    'Whittling...',
+    'Scavenging...',
+    'Spelunking...',
+    'Finagling...',
+    'Meandering...',
+    'Puttering...',
+    'Moseying...',
+    'Shimmying...',
+    'Scooching...',
+    'Fidgeting...',
+    'Razzle-dazzling...',
+    'Smoldering...',
+];
+
+function useEvalQuip(isActive: boolean) {
+    const [displayed, setDisplayed] = useState(' ');
+    const indexRef = useRef(0);
+    const targetRef = useRef(EVAL_QUIPS[0]);
+    const charRef = useRef(0);
+
+    useEffect(() => {
+        if (!isActive) {
+            setDisplayed(' ');
+            charRef.current = 0;
+            indexRef.current = 0;
+            return;
+        }
+
+        // Pick a random starting quip
+        indexRef.current = Math.floor(Math.random() * EVAL_QUIPS.length);
+        targetRef.current = EVAL_QUIPS[indexRef.current];
+        charRef.current = 0;
+
+        // Type out characters one at a time
+        const typeInterval = setInterval(() => {
+            const target = targetRef.current;
+            if (charRef.current < target.length) {
+                charRef.current++;
+                setDisplayed(target.slice(0, charRef.current));
+            }
+        }, 80);
+
+        // Swap to next quip — don't clear displayed, let the first typed char replace it
+        const quipInterval = setInterval(() => {
+            indexRef.current = (indexRef.current + 1) % EVAL_QUIPS.length;
+            targetRef.current = EVAL_QUIPS[indexRef.current];
+            charRef.current = 0;
+        }, 2500);
+
+        return () => {
+            clearInterval(typeInterval);
+            clearInterval(quipInterval);
+        };
+    }, [isActive]);
+
+    return displayed;
+}
+
 type ViewType = 'evaluator' | 'logs';
 
 function HomeContent() {
@@ -48,6 +159,8 @@ function HomeContent() {
     const [evalResult, setEvalResult] = useState<any | null>(null);
     const [evalRawResponse, setEvalRawResponse] = useState<string | null>(null);
     const [isEvaluating, setIsEvaluating] = useState(false);
+    const [evaluateStage, setEvaluateStage] = useState<string | null>(null);
+    const evalQuip = useEvalQuip(isEvaluating);
     const [runHistoryKey, setRunHistoryKey] = useState(0); // Force refresh of run history
     const [hyperparams, setHyperparams] = useState<Record<string, any>>({ temperature: 0.0, max_tokens: 4096, top_p: 1.0 });
     const [koreSessionId, setKoreSessionId] = useState<string | null>(null);  // Kore's internal session ID
@@ -283,24 +396,12 @@ function HomeContent() {
         }
         if (!evalInteraction || !fullGuardrailConfig) return;
         setIsEvaluating(true);
+        setEvalResult(null);
+        setEvalRawResponse(null);
+        setEvaluateStage('Starting evaluation...');
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-        try {
-            const res = await fetch(`${apiUrl}/evaluate`, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
-                body: JSON.stringify({
-                    userInput: evalInteraction.user,
-                    botResponse: evalInteraction.bot,
-                    guardrailConfig: fullGuardrailConfig,
-                    history: messages.filter(m => m.role !== 'evaluation'),
-                    hyperparams,
-                    overridePrompt: previewPrompt,
-                    overridePayload: previewPayload,
-                    guardrailLogs: llmInspectorRef.current?.getLogs() || []
-                })
-            });
-            const result = await res.json();
 
+        const processResult = async (result: any) => {
             setEvalResult(result);
             if (evalInteraction) {
                 setInteraction({ ...evalInteraction, result });
@@ -311,21 +412,15 @@ function HomeContent() {
             }
 
             // Skip saving to history if the evaluation LLM call itself failed
-            // (e.g. rate limit, auth error, network error) — these are not real evaluation results
-            if (result.error) {
-                return;
-            }
+            if (result.error) return;
 
             // Save run to database
             try {
-                // Extract individual guardrail results from the results array
                 const findResult = (name: string) => {
-                    // Check if this guardrail is actually active in the configuration
                     const isActive = guardrailPolicy?.activeGuardrails?.some((g: string) =>
                         g.toLowerCase().includes(name.toLowerCase())
                     );
-                    if (!isActive) return null; // Return null for inactive guardrails
-
+                    if (!isActive) return null;
                     if (!result.results) return null;
                     const found = result.results.find((r: any) =>
                         r.guardrail?.toLowerCase().includes(name.toLowerCase())
@@ -334,10 +429,8 @@ function HomeContent() {
                     return found.pass === 'N/A' ? null : found.pass;
                 };
 
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
-                const currentMsg = messages.findLast(m => m.role === 'user' && m.text === evalInteraction.user);
+                const currentMsg = messages.findLast(m => m.role === 'user' && m.text === evalInteraction!.user);
 
-                // Extract token usage from full API response
                 let inputTokens = null;
                 let outputTokens = null;
                 if (result.debug?.fullResponse) {
@@ -345,8 +438,6 @@ function HomeContent() {
                         const fullResp = typeof result.debug.fullResponse === 'string'
                             ? JSON.parse(result.debug.fullResponse)
                             : result.debug.fullResponse;
-
-                        // Extract from usage object (Anthropic format)
                         if (fullResp.usage) {
                             inputTokens = fullResp.usage.input_tokens || null;
                             outputTokens = fullResp.usage.output_tokens || null;
@@ -358,15 +449,12 @@ function HomeContent() {
 
                 await fetch(`${apiUrl}/runs`, {
                     method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                        'x-user-id': userId
-                    },
+                    headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
                     body: JSON.stringify({
                         userId,
                         sessionId: koreSessionId || null,
-                        userInput: evalInteraction.user,
-                        botResponse: evalInteraction.bot,
+                        userInput: evalInteraction!.user,
+                        botResponse: evalInteraction!.bot,
                         promptSent: result.debug?.requestPayload || result.debug?.prompt || previewPrompt || '',
                         llmOutput: result.debug?.fullResponse || result.debug?.response || '',
                         toxicityPass: findResult('toxicity'),
@@ -382,15 +470,82 @@ function HomeContent() {
                         model: result.model ?? null
                     })
                 });
-                // Trigger run history refresh
                 setRunHistoryKey(prev => prev + 1);
             } catch (saveError) {
                 console.error("Failed to save run:", saveError);
+            }
+        };
+
+        try {
+            const res = await fetch(`${apiUrl}/evaluate`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json', 'x-user-id': userId },
+                body: JSON.stringify({
+                    userInput: evalInteraction.user,
+                    botResponse: evalInteraction.bot,
+                    guardrailConfig: fullGuardrailConfig,
+                    history: messages.filter(m => m.role !== 'evaluation'),
+                    hyperparams,
+                    overridePrompt: previewPrompt,
+                    overridePayload: previewPayload,
+                    guardrailLogs: llmInspectorRef.current?.getLogs() || []
+                })
+            });
+
+            const contentType = res.headers.get('content-type') || '';
+
+            if (contentType.includes('text/event-stream') && res.body) {
+                // SSE stream processing
+                const reader = res.body.getReader();
+                const decoder = new TextDecoder();
+                let buffer = '';
+                let sseResult: any = null;
+
+                while (true) {
+                    const { done, value } = await reader.read();
+                    if (done) break;
+
+                    buffer += decoder.decode(value, { stream: true });
+                    const events = buffer.split('\n\n');
+                    buffer = events.pop() || '';
+
+                    for (const eventBlock of events) {
+                        if (!eventBlock.trim()) continue;
+                        let eventName = '';
+                        let eventData = '';
+                        for (const line of eventBlock.split('\n')) {
+                            if (line.startsWith('event: ')) eventName = line.slice(7).trim();
+                            else if (line.startsWith('data: ')) eventData = line.slice(6);
+                        }
+                        if (!eventName || !eventData) continue;
+                        try {
+                            const parsed = JSON.parse(eventData);
+                            if (eventName === 'complete') {
+                                sseResult = parsed.result;
+                            } else if (eventName === 'error') {
+                                sseResult = { error: parsed.error, details: parsed.details };
+                            } else {
+                                setEvaluateStage(parsed.message || eventName);
+                            }
+                        } catch (parseErr) {
+                            console.warn('Failed to parse SSE event:', parseErr);
+                        }
+                    }
+                }
+
+                if (sseResult) {
+                    await processResult(sseResult);
+                }
+            } else {
+                // Fallback: non-SSE response (e.g., 400 validation error)
+                const result = await res.json();
+                await processResult(result);
             }
         } catch (e) {
             console.error("Evaluation failed", e);
         } finally {
             setIsEvaluating(false);
+            setEvaluateStage(null);
         }
     };
 
@@ -432,7 +587,7 @@ function HomeContent() {
                                 className="h-16 w-auto object-contain"
                             />
                             <span className="text-2xl font-bold text-foreground tracking-tight hidden sm:block">RedGuard</span>
-                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.3.8</span>
+                            <span className="text-[10px] font-mono bg-[var(--surface-hover)] text-[var(--foreground-muted)] px-1.5 py-0.5 rounded border border-[var(--border)] mt-1">v0.4.0</span>
                         </div>
                         <div className="flex items-center gap-4">
                             <AuthButton />
@@ -593,7 +748,7 @@ function HomeContent() {
                                         <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Setup Connection</h3>
                                         <p className="text-xs text-[var(--foreground-muted)]">Connect your bot, chat to test responses, and generate adversarial attacks.</p>
                                     </div>
-                                    <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
+                                    <div className="grid grid-cols-12 gap-6" style={{ height: '600px' }}>
                                         <div className="col-span-4 h-full min-h-0">
                                             <BotSettings
                                                 onConfigChange={setBotConfig}
@@ -634,7 +789,7 @@ function HomeContent() {
                                         <h3 className="text-lg font-semibold text-[var(--foreground)] mb-1">Define guardrails</h3>
                                         <p className="text-xs text-[var(--foreground-muted)]">Set your safety policies and inspect real-time system logs.</p>
                                     </div>
-                                    <div className="grid grid-cols-12 gap-6" style={{ height: '550px' }}>
+                                    <div className="grid grid-cols-12 gap-6" style={{ height: '600px' }}>
                                         <div className="col-span-4 h-full min-h-0">
                                             <GuardrailSettings
                                                 ref={guardrailSettingsRef}
@@ -677,6 +832,7 @@ function HomeContent() {
                                                 previewPayload={previewPayload}
                                                 hyperparams={hyperparams}
                                                 onHyperparamsChange={setHyperparams}
+                                                evaluateStage={isEvaluating ? evalQuip : null}
                                             />
                                         </div>
                                     </div>

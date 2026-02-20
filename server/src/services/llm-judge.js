@@ -273,7 +273,7 @@ class LLMJudge {
      * @param {string} params.model // e.g. 'gpt-4o', 'claude-3-5-sonnet'
      * @param {object} params.hyperparams // { temperature, max_tokens, top_p }
      */
-    async evaluate({ userInput, botResponse, guardrails, criteria, apiKey, provider = 'anthropic', model, history = [], customPrompt, customSystemPrompt, hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], activeGuardrails = [], userId = null }) {
+    async evaluate({ userInput, botResponse, guardrails, criteria, apiKey, provider = 'anthropic', model, history = [], customPrompt, customSystemPrompt, hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], activeGuardrails = [], userId = null, onProgress = null }) {
         if (!apiKey) {
             return { error: `Missing API Key for ${provider}` };
         }
@@ -371,6 +371,11 @@ class LLMJudge {
                 responseFormat: templateResponseFormat || null
             };
 
+            if (onProgress) {
+                const providerName = provider.charAt(0).toUpperCase() + provider.slice(1);
+                onProgress({ stage: 'calling_llm', message: `Calling ${providerName} ${actualModel}...`, provider, model: actualModel });
+            }
+
             if (provider === 'openai') {
                 result = await this._callOpenAI(apiKey, actualModel, systemPrompt, params, overridePayload, templateOpts);
             } else if (provider === 'anthropic') {
@@ -386,6 +391,8 @@ class LLMJudge {
             } else {
                 return { error: `Unknown provider: ${provider}` };
             }
+
+            if (onProgress) onProgress({ stage: 'parsing_response', message: 'Parsing LLM response...' });
 
             // Log successful LLM call
             await apiLogger.log({

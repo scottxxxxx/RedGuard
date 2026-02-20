@@ -247,7 +247,11 @@ class ApiLogger {
         // No date filter: compute last 24h vs daily average instead of prev period
         const isUnfiltered = !currentStart && !currentEnd;
 
-        const [totalLogs, errorLogs, byType, byProvider, byProviderModel, tokensSum, latencyAvg, chatLatency, chatErrors, evalTokensSum, errorsByType, lastError] = await Promise.all([
+        // Base where without date filter — for historical averages
+        const historicalWhere = { ...where };
+        delete historicalWhere.timestamp;
+
+        const [totalLogs, errorLogs, byType, byProvider, byProviderModel, tokensSum, latencyAvg, chatLatency, chatErrors, evalTokensSum, evalLatency, historicalChatLatency, historicalEvalLatency, errorsByType, lastError] = await Promise.all([
             prisma.apiLog.count({ where }),
             prisma.apiLog.count({ where: { ...where, isError: true } }),
             prisma.apiLog.groupBy({
@@ -274,14 +278,12 @@ class ApiLogger {
             }),
             prisma.apiLog.aggregate({
                 where,
-                _avg: { latencyMs: true },
-                _max: { latencyMs: true }
+                _avg: { latencyMs: true }
             }),
-            // Chat-specific latency
+            // Chat-specific latency (current period)
             prisma.apiLog.aggregate({
                 where: { ...where, logType: 'kore_chat' },
-                _avg: { latencyMs: true },
-                _max: { latencyMs: true }
+                _avg: { latencyMs: true }
             }),
             // Chat error count
             prisma.apiLog.count({ where: { ...where, logType: 'kore_chat', isError: true } }),
@@ -289,6 +291,21 @@ class ApiLogger {
             prisma.apiLog.aggregate({
                 where: { ...where, logType: 'llm_evaluate' },
                 _sum: { totalTokens: true }
+            }),
+            // Eval-specific latency (current period)
+            prisma.apiLog.aggregate({
+                where: { ...where, logType: 'llm_evaluate' },
+                _avg: { latencyMs: true }
+            }),
+            // Historical chat latency (all-time, no date filter)
+            prisma.apiLog.aggregate({
+                where: { ...historicalWhere, logType: 'kore_chat' },
+                _avg: { latencyMs: true }
+            }),
+            // Historical eval latency (all-time, no date filter)
+            prisma.apiLog.aggregate({
+                where: { ...historicalWhere, logType: 'llm_evaluate' },
+                _avg: { latencyMs: true }
             }),
             // Errors grouped by logType
             prisma.apiLog.groupBy({
@@ -346,7 +363,6 @@ class ApiLogger {
             errorLogs,
             totalTokens: tokensSum._sum.totalTokens || 0,
             avgLatencyMs: Math.round(latencyAvg._avg.latencyMs || 0),
-            maxLatencyMs: Math.round(latencyAvg._max.latencyMs || 0),
             errorRate: totalLogs > 0 ? (errorLogs / totalLogs * 100).toFixed(2) : 0,
             prevPeriodTotal: prevTotal,
             last24h,
@@ -355,8 +371,12 @@ class ApiLogger {
             evalOutcome: { passed: evalPassed, failed: evalFailed, total: evalTotal },
             chatStats: {
                 avgLatencyMs: Math.round(chatLatency._avg.latencyMs || 0),
-                maxLatencyMs: Math.round(chatLatency._max.latencyMs || 0),
+                historicalAvgLatencyMs: Math.round(historicalChatLatency._avg.latencyMs || 0),
                 errorCount: chatErrors
+            },
+            evalStats: {
+                avgLatencyMs: Math.round(evalLatency._avg.latencyMs || 0),
+                historicalAvgLatencyMs: Math.round(historicalEvalLatency._avg.latencyMs || 0)
             },
             byType: byType.reduce((acc, item) => {
                 acc[item.logType] = item._count;

@@ -19,12 +19,30 @@ router.post('/', async (req, res) => {
         return res.status(400).json({ error: "Missing required fields: userInput, botResponse, or guardrailConfig" });
     }
 
+    // Set SSE headers
+    res.writeHead(200, {
+        'Content-Type': 'text/event-stream',
+        'Cache-Control': 'no-cache',
+        'Connection': 'keep-alive',
+        'X-Accel-Buffering': 'no'
+    });
+
+    const sendSSE = (eventName, data) => {
+        try { res.write(`event: ${eventName}\ndata: ${JSON.stringify(data)}\n\n`); } catch (e) { /* client disconnected */ }
+    };
+
+    const onProgress = (progressData) => {
+        sendSSE(progressData.stage, progressData);
+    };
+
     try {
-        const evaluation = await guardrailService.evaluateResponse(userInput, botResponse, guardrailConfig, history, hyperparams, overridePrompt, overridePayload, guardrailLogs, userId);
-        res.json(evaluation);
+        const evaluation = await guardrailService.evaluateResponse(userInput, botResponse, guardrailConfig, history, hyperparams, overridePrompt, overridePayload, guardrailLogs, userId, onProgress);
+        sendSSE('complete', { stage: 'complete', result: evaluation });
     } catch (error) {
         console.error("Evaluation Route Error:", error);
-        res.status(500).json({ error: "Evaluation failed", details: error.message });
+        sendSSE('error', { stage: 'error', error: "Evaluation failed", details: error.message });
+    } finally {
+        res.end();
     }
 });
 

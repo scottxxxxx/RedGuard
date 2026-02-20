@@ -5,8 +5,7 @@ const AdmZip = require('adm-zip');
 const koreApiService = require('../services/kore-api');
 const apiLogger = require('../services/api-logger');
 const botConfigAnalyzer = require('../services/bot-config-analyzer');
-
-const BOT_BACKUP_SERVICE_URL = process.env.BOT_BACKUP_SERVICE_URL || `http://localhost:${process.env.BOT_BACKUP_SERVICE_PORT || 3005}`;
+const BackupService = require('../services/backup-service');
 
 const { PrismaClient } = require('@prisma/client');
 const prisma = new PrismaClient();
@@ -309,8 +308,7 @@ router.post('/validate', async (req, res) => {
 // ── Bot Backup / Fetch Guardrails from Bot ──────────────────────────────
 
 router.post('/backup-guardrails', async (req, res) => {
-    const { botConfig, userId } = req.body;
-    const explicitUserId = userId || 'unknown';
+    const { botConfig } = req.body;
 
     try {
         if (!botConfig || !botConfig.botId || !botConfig.clientId || !botConfig.clientSecret) {
@@ -335,31 +333,24 @@ router.post('/backup-guardrails', async (req, res) => {
             }
         }
 
-        console.log(`[Backup Guardrails] Starting backup for bot ${botConfig.botId} via ${BOT_BACKUP_SERVICE_URL}`);
+        console.log(`[Backup Guardrails] Starting backup for bot ${botConfig.botId}`);
 
-        const response = await axios.post(`${BOT_BACKUP_SERVICE_URL}/api/backup/start`, {
-            botId: botConfig.botId,
-            clientId: botConfig.clientId,
-            clientSecret: botConfig.clientSecret,
+        const jobId = await BackupService.startBackup(
+            botConfig.botId,
+            botConfig.clientId,
+            botConfig.clientSecret,
             platformHost,
             botsHost
-        });
+        );
 
         res.json({
-            jobId: response.data.jobId,
-            status: response.data.status || 'started'
+            jobId,
+            status: 'started'
         });
     } catch (error) {
         console.error("[Backup Guardrails] Error:", error.message);
-
-        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-            return res.status(503).json({
-                error: "Backup service unavailable. Make sure the bot-backup microservice is running on port " + (process.env.BOT_BACKUP_SERVICE_PORT || 3005)
-            });
-        }
-
-        res.status(error.response?.status || 500).json({
-            error: error.response?.data?.error || error.message
+        res.status(500).json({
+            error: error.message
         });
     }
 });
@@ -368,8 +359,17 @@ router.get('/backup-guardrails/:jobId', async (req, res) => {
     const { jobId } = req.params;
 
     try {
-        const response = await axios.get(`${BOT_BACKUP_SERVICE_URL}/api/backup/status/${jobId}`);
-        const jobData = response.data;
+        const jobData = await BackupService.getJobStatus(jobId);
+
+        // Job not found
+        if (jobData.status === 'not_found') {
+            return res.status(404).json({ error: 'Job not found' });
+        }
+
+        // If already analyzed, return cached guardrails
+        if (jobData.status === 'analyzed' && jobData.guardrails) {
+            return res.json({ status: 'completed', guardrails: jobData.guardrails });
+        }
 
         // If completed, download zip, extract, and analyze
         if (jobData.status === 'completed' && jobData.downloadUrl) {
@@ -420,19 +420,31 @@ router.get('/backup-guardrails/:jobId', async (req, res) => {
                 // Run through analyzer
                 const analysis = botConfigAnalyzer.analyze(jsonContent);
 
-                return res.json({
-                    status: 'completed',
-                    guardrails: {
-                        enabledGuardrails: analysis.enabledGuardrails,
-                        topics: analysis.topics,
-                        regexPatterns: analysis.regexPatterns,
-                        descriptions: analysis.descriptions,
-                        featureDetails: analysis.featureDetails
-                    }
+                const guardrails = {
+                    enabledGuardrails: analysis.enabledGuardrails,
+                    topics: analysis.topics,
+                    regexPatterns: analysis.regexPatterns,
+                    descriptions: analysis.descriptions,
+                    featureDetails: analysis.featureDetails
+                };
+
+                // Cache result so subsequent polls don't re-download
+                BackupService.updateJob(jobId, {
+                    status: 'analyzed',
+                    guardrails,
+                    downloadUrl: null
                 });
+
+                return res.json({ status: 'completed', guardrails });
             } catch (extractError) {
                 console.error("[Backup Guardrails] Extract/analyze error:", extractError.message);
-                return res.status(500).json({
+                // Mark job as failed so we don't re-attempt on next poll
+                BackupService.updateJob(jobId, {
+                    status: 'failed',
+                    error: `Failed to process exported bot: ${extractError.message}`,
+                    downloadUrl: null
+                });
+                return res.json({
                     status: 'failed',
                     error: `Failed to process exported bot: ${extractError.message}`
                 });
@@ -461,15 +473,8 @@ router.get('/backup-guardrails/:jobId', async (req, res) => {
         });
     } catch (error) {
         console.error("[Backup Guardrails] Status check error:", error.message);
-
-        if (error.code === 'ECONNREFUSED' || error.code === 'ENOTFOUND') {
-            return res.status(503).json({
-                error: "Backup service unavailable"
-            });
-        }
-
-        res.status(error.response?.status || 500).json({
-            error: error.response?.data?.error || error.message
+        res.status(500).json({
+            error: error.message
         });
     }
 });

@@ -1,5 +1,6 @@
 "use client";
 import { useState, useImperativeHandle, forwardRef, useCallback, useEffect, useRef, useMemo } from 'react';
+import { createPortal } from 'react-dom';
 import { BotConfig } from './BotSettings';
 
 interface Props {
@@ -15,11 +16,39 @@ export interface LLMInspectorRef {
     getLogs: () => any[];
 }
 
+// Execution-order priority for tiebreaking same-second timestamps
+// 0 = input guardrail, 1 = agent/LLM processing, 2 = output guardrail, 3 = other
+function getLogPriority(log: any): number {
+    const feature = (log['Feature Name '] || log.Feature || '').toLowerCase();
+    if (feature.includes('guardrail') && (feature.includes('input') || feature.includes('request'))) return 0;
+    if (feature.includes('agent node') || feature.includes('dialog') || feature.includes('llm') || feature.includes('genai') || feature.includes('orchestrator') || feature.includes('conversation manager')) return 1;
+    if (feature.includes('guardrail') && (feature.includes('output') || feature.includes('response'))) return 2;
+    return 3;
+}
+
 const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, koreSessionId, onLogsUpdated }, ref) => {
     const [logs, setLogs] = useState<any[]>([]);
     const [isLoading, setIsLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
-    const [selectedLog, setSelectedLog] = useState<any | null>(null);
+    const [selectedLogIndex, setSelectedLogIndex] = useState<number | null>(null);
+    // Keyboard navigation for log detail modal
+    useEffect(() => {
+        if (selectedLogIndex === null) return;
+        const handleKeyDown = (e: KeyboardEvent) => {
+            if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setSelectedLogIndex(prev => Math.max(0, (prev ?? 0) - 1));
+            } else if (e.key === 'ArrowRight' || e.key === 'ArrowDown') {
+                e.preventDefault();
+                setSelectedLogIndex(prev => Math.min(logs.length - 1, (prev ?? 0) + 1));
+            } else if (e.key === 'Escape') {
+                setSelectedLogIndex(null);
+            }
+        };
+        window.addEventListener('keydown', handleKeyDown);
+        return () => window.removeEventListener('keydown', handleKeyDown);
+    }, [selectedLogIndex, logs.length]);
+
     const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
     const fetchLogs = useCallback(async () => {
         if (!botConfig) return;
@@ -74,10 +103,10 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
         }
     }, [botConfig, koreSessionId]);
 
-    // Reset logs when session changes
+    // Fetch fresh logs when session changes (don't clear — preserves logs during re-evaluations)
     useEffect(() => {
         if (koreSessionId) {
-            setLogs([]);
+            fetchLogs();
         }
     }, [koreSessionId]);
 
@@ -87,33 +116,35 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
         clearLogs: () => {
             setLogs([]);
         },
-        getLogs: () => logs
+        getLogs: () => [...logs].sort((a, b) => {
+            const timeA = new Date(a['start Date'] || 0).getTime();
+            const timeB = new Date(b['start Date'] || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+            return getLogPriority(a) - getLogPriority(b);
+        })
     }));
 
-    // Compute log numbers matching server-side llm-judge.js categorization
+    // Sort logs by timestamp ascending, with execution-order tiebreaker for same-second entries
+    const sortedLogs = useMemo(() => {
+        if (logs.length === 0) return [];
+        return [...logs].sort((a, b) => {
+            const timeA = new Date(a['start Date'] || 0).getTime();
+            const timeB = new Date(b['start Date'] || 0).getTime();
+            if (timeA !== timeB) return timeA - timeB;
+            return getLogPriority(a) - getLogPriority(b);
+        });
+    }, [logs]);
+
+    // Assign X.Y section labels based on sorted order
     const logNumberMap = useMemo(() => {
         const map = new Map<number, string>();
-        if (logs.length === 0) return map;
+        if (sortedLogs.length === 0) return map;
 
-        // Build index pairs: [originalIndex, log] then sort by start Date ascending
-        const indexed = logs.map((log, i) => ({ i, log }));
-        const sorted = [...indexed].sort((a, b) =>
-            new Date(a.log['start Date'] || 0).getTime() - new Date(b.log['start Date'] || 0).getTime()
-        );
-
-        // Categorize into sections using the same heuristic as server
-        const sections: { idx: number }[][] = [[], [], [], []]; // sections 1-4
-        for (const { i: origIdx, log } of sorted) {
-            const feature = (log['Feature Name '] || log.Feature || '').toLowerCase();
-            if (feature.includes('guardrail') && (feature.includes('input') || feature.includes('request'))) {
-                sections[0].push({ idx: origIdx });
-            } else if (feature.includes('guardrail') && (feature.includes('output') || feature.includes('response'))) {
-                sections[2].push({ idx: origIdx });
-            } else if (feature.includes('agent node') || feature.includes('dialog') || feature.includes('llm') || feature.includes('genai') || feature.includes('orchestrator') || feature.includes('conversation manager')) {
-                sections[1].push({ idx: origIdx });
-            } else {
-                sections[3].push({ idx: origIdx });
-            }
+        // Categorize into sections: 1=input guardrail, 2=agent/LLM, 3=output guardrail, 4=other
+        const sections: { idx: number }[][] = [[], [], [], []];
+        for (let i = 0; i < sortedLogs.length; i++) {
+            const priority = getLogPriority(sortedLogs[i]);
+            sections[priority].push({ idx: i });
         }
 
         // Assign X.Y labels
@@ -124,7 +155,11 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
         });
 
         return map;
-    }, [logs]);
+    }, [sortedLogs]);
+
+    const selectedLog = selectedLogIndex !== null && sortedLogs[selectedLogIndex]
+        ? { ...sortedLogs[selectedLogIndex], _logNumber: logNumberMap.get(selectedLogIndex) }
+        : null;
 
     return (
         <div className="card p-6 h-full flex flex-col">
@@ -174,7 +209,7 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                         </tr>
                     </thead>
                     <tbody className="bg-[var(--surface)] divide-y divide-[var(--border)]">
-                        {logs.map((log: any, i: number) => {
+                        {sortedLogs.map((log: any, i: number) => {
                             const feature = log['Feature Name '] || log.Feature || '-';
                             const description = log.Description || '-';
                             const model = log.Integration || log['Model Name'] || log.Model || '-';
@@ -183,7 +218,7 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                             return (
                                 <tr
                                     key={i}
-                                    onClick={() => setSelectedLog({ ...log, _logNumber: logNumberMap.get(i) })}
+                                    onClick={() => setSelectedLogIndex(i)}
                                     className="hover:bg-[var(--surface-hover)] cursor-pointer transition-colors"
                                 >
                                     <td className="px-3 py-2 text-xs font-mono font-bold text-[var(--foreground-muted)]">
@@ -217,12 +252,6 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                             <>
                                 <p>No logs found for this session yet.</p>
                                 <p className="text-xs mt-2 text-[var(--foreground-muted)]">Logs will be fetched automatically after bot responses.</p>
-                                <button
-                                    onClick={fetchLogs}
-                                    className="mt-3 text-xs bg-[var(--primary-50)] text-[var(--primary-600)] px-3 py-1 rounded border border-[var(--primary-200)] hover:bg-[var(--primary-100)]"
-                                >
-                                    Fetch Logs Now
-                                </button>
                             </>
                         ) : (
                             <>
@@ -234,9 +263,9 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                 )}
             </div>
 
-            {/* Modal for details */}
-            {selectedLog && (
-                <div className="fixed inset-0 bg-black/50 backdrop-blur-sm flex items-center justify-center p-4 z-50">
+            {/* Modal for details — portal to body so backdrop-filter ancestors don't break fixed positioning */}
+            {selectedLog && createPortal(
+                <div className="fixed inset-0 bg-black/50 flex items-center justify-center p-4 z-50">
                     <div className="bg-[var(--surface)] rounded-lg shadow-xl w-full max-w-5xl h-[85vh] flex flex-col">
                         <div className="p-4 border-b flex justify-between items-center bg-[var(--surface-hover)] rounded-t-lg">
                             <div>
@@ -250,7 +279,30 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                                 </h3>
                                 <p className="text-xs text-[var(--foreground-muted)]">{new Date(selectedLog['start Date']).toLocaleString()}</p>
                             </div>
-                            <button onClick={() => setSelectedLog(null)} className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl">&times;</button>
+                            <div className="flex items-center gap-2">
+                                {/* Prev/Next navigation */}
+                                <button
+                                    onClick={() => setSelectedLogIndex(Math.max(0, (selectedLogIndex ?? 0) - 1))}
+                                    disabled={selectedLogIndex === 0}
+                                    className="p-1.5 rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Previous log"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" /></svg>
+                                </button>
+                                <span className="text-xs font-mono text-[var(--foreground-muted)] min-w-[4rem] text-center">
+                                    {(selectedLogIndex ?? 0) + 1} of {logs.length}
+                                </span>
+                                <button
+                                    onClick={() => setSelectedLogIndex(Math.min(logs.length - 1, (selectedLogIndex ?? 0) + 1))}
+                                    disabled={selectedLogIndex === logs.length - 1}
+                                    className="p-1.5 rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:text-[var(--foreground)] hover:bg-[var(--surface-hover)] disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+                                    title="Next log"
+                                >
+                                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" /></svg>
+                                </button>
+                                {/* Close button */}
+                                <button onClick={() => setSelectedLogIndex(null)} className="text-[var(--foreground-muted)] hover:text-[var(--foreground)] p-2 text-2xl ml-2">&times;</button>
+                            </div>
                         </div>
                         <div className="flex-1 overflow-auto p-6 space-y-6">
 
@@ -276,7 +328,7 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                                 <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center gap-2">
                                     <span>📤 Request Payload (Sent to LLM)</span>
                                 </h4>
-                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[400px] border border-gray-700 shadow-inner language-json">
+                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[400px] border border-gray-700 shadow-inner language-json whitespace-pre-wrap break-words">
                                     {JSON.stringify(selectedLog['Payload Details']?.['Request Payload'] || selectedLog['Request Payload'], null, 2)}
                                 </pre>
                             </div>
@@ -285,14 +337,15 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                                 <h4 className="font-medium text-sm text-[var(--foreground-secondary)] mb-2 flex items-center gap-2">
                                     <span>📥 Response Payload (From LLM)</span>
                                 </h4>
-                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[300px] border border-gray-700 shadow-inner language-json">
+                                <pre className="bg-gray-900 text-gray-100 p-4 rounded-lg text-xs overflow-auto max-h-[300px] border border-gray-700 shadow-inner language-json whitespace-pre-wrap break-words">
                                     {JSON.stringify(selectedLog['Payload Details']?.['Response Payload'] || selectedLog['Response Payload'], null, 2)}
                                 </pre>
                             </div>
 
                         </div>
                     </div>
-                </div>
+                </div>,
+                document.body
             )}
         </div>
     );

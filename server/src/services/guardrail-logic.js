@@ -2,7 +2,7 @@ const llmJudge = require('./llm-judge');
 
 class GuardrailLogic {
 
-    async evaluateResponse(userInput, botResponse, config, history = [], hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], userId = null) {
+    async evaluateResponse(userInput, botResponse, config, history = [], hyperparams = {}, overridePrompt = null, overridePayload = null, guardrailLogs = [], userId = null, onProgress = null) {
         const results = [];
         let overallPass = true;
         let activeSet = new Set(config.activeGuardrails);
@@ -39,6 +39,8 @@ class GuardrailLogic {
         if (activeSet.has('injection')) llmGuardrails.push('injection');
 
         // 3. Perform the Unified LLM Evaluation
+        if (onProgress) onProgress({ stage: 'constructing_prompt', message: 'Constructing evaluation prompt...' });
+
         const judgeResult = await llmJudge.evaluate({
             userInput,
             botResponse,
@@ -58,7 +60,8 @@ class GuardrailLogic {
             overridePayload,
             guardrailLogs,
             activeGuardrails: config.activeGuardrails,
-            userId
+            userId,
+            onProgress
         });
 
         if (judgeResult.error) {

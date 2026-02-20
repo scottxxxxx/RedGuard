@@ -24,18 +24,19 @@ interface LogStats {
     errorLogs: number;
     totalTokens: number;
     avgLatencyMs: number;
-    maxLatencyMs: number;
     errorRate: string;
     prevPeriodTotal: number | null;
     last24h: number | null;
     dailyAvg: number | null;
     evalTokens: number;
     evalOutcome: { passed: number; failed: number; total: number };
-    chatStats: { avgLatencyMs: number; maxLatencyMs: number; errorCount: number };
+    chatStats: { avgLatencyMs: number; historicalAvgLatencyMs: number; errorCount: number };
+    evalStats: { avgLatencyMs: number; historicalAvgLatencyMs: number };
     byType: Record<string, number>;
     byProvider: Array<{ provider: string; count: number; avgLatencyMs: number; totalTokens: number }>;
     errorsByType: Record<string, number>;
     lastError: { timestamp: string; logType: string; errorMessage: string } | null;
+    costEstimate?: { totalEstimate: number; disclaimer: string };
 }
 
 export default function LogViewer() {
@@ -267,11 +268,10 @@ export default function LogViewer() {
                 </div>
                 <button
                     onClick={() => setFilter({ ...filter, startDate: '', endDate: '', last24h: !filter.last24h })}
-                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${
-                        filter.last24h
+                    className={`px-3 py-2 text-sm rounded-lg border transition-colors ${filter.last24h
                             ? 'bg-[var(--primary-600)] text-white border-[var(--primary-600)]'
                             : 'border-[var(--border)] text-[var(--foreground-secondary)] hover:bg-[var(--surface-hover)]'
-                    }`}
+                        }`}
                 >
                     Last 24h
                 </button>
@@ -308,8 +308,7 @@ export default function LogViewer() {
                 const providerColors: Record<string, string> = { kore: '#3b82f6', anthropic: '#8b5cf6', openai: '#10b981', gemini: '#f59e0b', deepseek: '#06b6d4', unknown: '#9ca3af' };
                 const maxProviderCount = Math.max(...(stats.byProvider?.map(p => p.count) || [1]), 1);
                 const formatLatency = (ms: number) => ms >= 10000 ? `${(ms / 1000).toFixed(1)}s` : `${ms.toLocaleString()}ms`;
-                const latencyColor = stats.avgLatencyMs < 1000 ? '#059669' : stats.avgLatencyMs < 5000 ? '#d97706' : '#dc2626';
-                const latencyPct = stats.maxLatencyMs > 0 ? Math.min((stats.avgLatencyMs / stats.maxLatencyMs) * 100, 100) : 0;
+                const getLatencyColor = (ms: number) => ms < 1000 ? '#059669' : ms < 5000 ? '#d97706' : '#dc2626';
                 const chatCount = stats.byType['kore_chat'] || 0;
                 const evalCount = stats.byType['llm_evaluate'] || 0;
                 const genAiCount = stats.byType['kore_genAI_logs'] || 0;
@@ -334,11 +333,10 @@ export default function LogViewer() {
                                         const isUp = diff > 0;
                                         const isFlat = diff === 0;
                                         return (
-                                            <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                                isFlat ? 'bg-gray-50 dark:bg-gray-800 text-gray-500'
+                                            <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${isFlat ? 'bg-gray-50 dark:bg-gray-800 text-gray-500'
                                                     : isUp ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
-                                                    : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
-                                            }`}>
+                                                        : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
+                                                }`}>
                                                 <div className="flex items-center gap-0.5">
                                                     {!isFlat && (
                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -361,11 +359,10 @@ export default function LogViewer() {
                                         const isUp = diff > 0;
                                         const isFlat = diff === 0;
                                         return (
-                                            <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                                isFlat ? 'bg-gray-50 dark:bg-gray-800 text-gray-500'
+                                            <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${isFlat ? 'bg-gray-50 dark:bg-gray-800 text-gray-500'
                                                     : isUp ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
-                                                    : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
-                                            }`}>
+                                                        : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
+                                                }`}>
                                                 <div className="flex items-center gap-0.5">
                                                     {!isFlat && (
                                                         <svg className="w-3 h-3" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -409,12 +406,11 @@ export default function LogViewer() {
                                     <div className={`text-3xl font-bold tracking-tight ${stats.errorLogs > 0 ? 'text-red-600 dark:text-red-400' : 'text-[var(--foreground)]'}`}>{stats.errorLogs}</div>
                                     <div className="flex items-center gap-2 mt-1">
                                         <span className="text-xs font-medium text-[var(--foreground-muted)]">Errors</span>
-                                        <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${
-                                            errorSeverity === 'none' ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/60' :
-                                            errorSeverity === 'low' ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/60' :
-                                            errorSeverity === 'medium' ? 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/60' :
-                                            'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/60'
-                                        }`}>
+                                        <span className={`text-[9px] font-semibold uppercase tracking-wider px-1.5 py-0.5 rounded ${errorSeverity === 'none' ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/60' :
+                                                errorSeverity === 'low' ? 'text-green-700 dark:text-green-300 bg-green-50 dark:bg-green-900/60' :
+                                                    errorSeverity === 'medium' ? 'text-orange-700 dark:text-orange-300 bg-orange-50 dark:bg-orange-900/60' :
+                                                        'text-red-700 dark:text-red-300 bg-red-50 dark:bg-red-900/60'
+                                            }`}>
                                             {errorSeverity === 'none' ? 'All Clear' : errorSeverity === 'low' ? 'Low' : errorSeverity === 'medium' ? 'Elevated' : 'Critical'}
                                         </span>
                                     </div>
@@ -480,25 +476,24 @@ export default function LogViewer() {
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Chat Messages</div>
                                 </div>
                                 {/* Success rate badge */}
-                                {chatCount > 0 && (
-                                    <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                        stats.chatStats.errorCount === 0 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300' : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
-                                    }`}>
-                                        <span>{Math.round(((chatCount - stats.chatStats.errorCount) / chatCount) * 100)}%</span>
-                                        <span className="text-[9px] font-normal text-[var(--foreground-muted)]">success</span>
-                                    </div>
-                                )}
+                                {chatCount > 0 && (() => {
+                                    const successRate = (chatCount - stats.chatStats.errorCount) / chatCount;
+                                    const badgeClass = successRate >= 0.95 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
+                                        : successRate >= 0.90 ? 'bg-amber-50 dark:bg-amber-900/60 text-amber-600 dark:text-amber-300'
+                                            : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300';
+                                    return (
+                                        <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${badgeClass}`}>
+                                            <span>{Math.round(successRate * 100)}%</span>
+                                            <span className="text-[9px] font-normal text-[var(--foreground-muted)]">success</span>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                             <div className="mt-3 space-y-1">
                                 {chatCount > 0 ? (
                                     <>
                                         <div className="text-[10px] text-[var(--foreground-muted)]">
-                                            Avg response: <span className="font-mono font-medium">{stats.chatStats.avgLatencyMs >= 10000 ? `${(stats.chatStats.avgLatencyMs / 1000).toFixed(1)}s` : `${stats.chatStats.avgLatencyMs.toLocaleString()}ms`}</span>
-                                            {stats.chatStats.maxLatencyMs > 0 && (
-                                                <span className="ml-1 text-[var(--foreground-muted)]">
-                                                    (max {stats.chatStats.maxLatencyMs >= 10000 ? `${(stats.chatStats.maxLatencyMs / 1000).toFixed(1)}s` : `${stats.chatStats.maxLatencyMs.toLocaleString()}ms`})
-                                                </span>
-                                            )}
+                                            Avg response: <span className="font-mono font-medium">{formatLatency(stats.chatStats.avgLatencyMs)}</span>
                                         </div>
                                         {stats.chatStats.errorCount > 0 && (
                                             <div className="text-[10px] text-red-500 dark:text-red-400">
@@ -516,24 +511,25 @@ export default function LogViewer() {
                         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <div className={`text-3xl font-bold tracking-tight ${
-                                        stats.evalOutcome.total === 0 ? 'text-[var(--foreground)]'
-                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.10 ? 'text-red-600 dark:text-red-400'
-                                            : (stats.evalOutcome.failed / stats.evalOutcome.total) >= 0.05 ? 'text-amber-500 dark:text-amber-400'
-                                            : 'text-emerald-600 dark:text-emerald-400'
-                                    }`}>{stats.evalOutcome.total}</div>
+                                    <div className={`text-3xl font-bold tracking-tight ${stats.evalOutcome.total === 0 ? 'text-[var(--foreground)]'
+                                            : (stats.evalOutcome.passed / stats.evalOutcome.total) >= 0.95 ? 'text-emerald-600 dark:text-emerald-400'
+                                                : (stats.evalOutcome.passed / stats.evalOutcome.total) >= 0.90 ? 'text-amber-500 dark:text-amber-400'
+                                                    : 'text-red-600 dark:text-red-400'
+                                        }`}>{stats.evalOutcome.total}</div>
                                     <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Evaluation Runs</div>
                                 </div>
-                                {stats.evalOutcome.total > 0 ? (
-                                    <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${
-                                        stats.evalOutcome.failed === 0 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
-                                            : stats.evalOutcome.passed === 0 ? 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300'
-                                            : 'bg-amber-50 dark:bg-amber-900/60 text-amber-600 dark:text-amber-300'
-                                    }`}>
-                                        <span>{Math.round((stats.evalOutcome.passed / stats.evalOutcome.total) * 100)}%</span>
-                                        <span className="text-[9px] font-normal text-[var(--foreground-muted)]">pass rate</span>
-                                    </div>
-                                ) : (
+                                {stats.evalOutcome.total > 0 ? (() => {
+                                    const passRate = stats.evalOutcome.passed / stats.evalOutcome.total;
+                                    const badgeClass = passRate >= 0.95 ? 'bg-emerald-50 dark:bg-emerald-900/60 text-emerald-600 dark:text-emerald-300'
+                                        : passRate >= 0.90 ? 'bg-amber-50 dark:bg-amber-900/60 text-amber-600 dark:text-amber-300'
+                                            : 'bg-red-50 dark:bg-red-900/60 text-red-500 dark:text-red-300';
+                                    return (
+                                        <div className={`flex flex-col items-end gap-0.5 px-2 py-1 rounded-lg text-[10px] font-semibold ${badgeClass}`}>
+                                            <span>{Math.round(passRate * 100)}%</span>
+                                            <span className="text-[9px] font-normal text-[var(--foreground-muted)]">pass rate</span>
+                                        </div>
+                                    );
+                                })() : (
                                     <div className="w-8 h-8 rounded-lg bg-purple-50 dark:bg-purple-900/40 flex items-center justify-center">
                                         <svg className="w-4 h-4 text-purple-500 dark:text-purple-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                                             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
@@ -643,34 +639,39 @@ export default function LogViewer() {
                             </div>
                         </div>
 
-                        {/* Avg Latency with gauge */}
+                        {/* Avg Eval Latency */}
                         <div className="bg-[var(--surface)] border border-[var(--border)] rounded-xl p-4 shadow-sm hover:shadow-md transition-shadow">
                             <div className="flex items-start justify-between">
                                 <div>
-                                    <div className="text-3xl font-bold tracking-tight" style={{ color: latencyColor }}>
-                                        {formatLatency(stats.avgLatencyMs)}
+                                    <div className="text-3xl font-bold tracking-tight" style={{ color: stats.evalStats.avgLatencyMs > 0 ? getLatencyColor(stats.evalStats.avgLatencyMs) : 'var(--foreground)' }}>
+                                        {stats.evalStats.avgLatencyMs > 0 ? formatLatency(stats.evalStats.avgLatencyMs) : '—'}
                                     </div>
-                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Avg Latency</div>
+                                    <div className="text-xs font-medium text-[var(--foreground-muted)] mt-1">Avg Eval Latency</div>
                                 </div>
-                                {/* Gauge arc */}
-                                <div className="relative w-10 h-10">
-                                    <svg viewBox="0 0 36 36" className="w-10 h-10" style={{ transform: 'rotate(-90deg)' }}>
-                                        <circle cx="18" cy="18" r="14" fill="none" stroke="var(--border)" strokeWidth="3.5"
-                                            strokeDasharray="66 88" />
-                                        <circle cx="18" cy="18" r="14" fill="none"
-                                            stroke={latencyColor} strokeWidth="3.5" strokeLinecap="round"
-                                            strokeDasharray={`${latencyPct * 0.66} 88`} />
-                                    </svg>
-                                    <span className="absolute inset-0 flex items-center justify-center text-[7px] font-bold text-[var(--foreground-muted)]">
-                                        AVG
-                                    </span>
-                                </div>
+                                {stats.evalStats.avgLatencyMs > 0 && (
+                                    <div className="w-8 h-8 rounded-lg bg-indigo-50 dark:bg-indigo-900/40 flex items-center justify-center">
+                                        <svg className="w-4 h-4 text-indigo-500 dark:text-indigo-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                                        </svg>
+                                    </div>
+                                )}
                             </div>
-                            <div className="mt-2 flex items-center gap-2">
-                                {stats.maxLatencyMs > 0 && (
-                                    <span className="text-[10px] text-[var(--foreground-muted)]">
-                                        Max: <span className="font-mono font-medium">{formatLatency(stats.maxLatencyMs)}</span>
-                                    </span>
+                            <div className="mt-3 space-y-1">
+                                {stats.evalStats.historicalAvgLatencyMs > 0 && stats.evalStats.avgLatencyMs > 0 && (() => {
+                                    const current = stats.evalStats.avgLatencyMs;
+                                    const historical = stats.evalStats.historicalAvgLatencyMs;
+                                    const pctChange = Math.round(((current - historical) / historical) * 100);
+                                    const isFaster = pctChange < 0;
+                                    const isSame = pctChange === 0;
+                                    return (
+                                        <div className="text-[10px]" style={{ color: isSame ? 'var(--foreground-muted)' : isFaster ? '#059669' : '#dc2626' }}>
+                                            {isSame ? '— Same as' : isFaster ? `▲ ${Math.abs(pctChange)}% faster than` : `▼ ${Math.abs(pctChange)}% slower than`} historical avg
+                                            <span className="ml-1 text-[var(--foreground-muted)]">({formatLatency(historical)})</span>
+                                        </div>
+                                    );
+                                })()}
+                                {stats.evalStats.avgLatencyMs === 0 && (
+                                    <div className="text-[10px] text-[var(--foreground-muted)]">Run an evaluation to see latency data</div>
                                 )}
                             </div>
                         </div>
@@ -837,11 +838,10 @@ export default function LogViewer() {
                                 <button
                                     key={page}
                                     onClick={() => { setCurrentPage(page); setExpandedLog(null); }}
-                                    className={`w-7 h-7 text-xs font-medium rounded transition-colors ${
-                                        page === currentPage
+                                    className={`w-7 h-7 text-xs font-medium rounded transition-colors ${page === currentPage
                                             ? 'bg-[var(--primary-600)] text-white'
                                             : 'text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)]'
-                                    }`}
+                                        }`}
                                 >
                                     {page}
                                 </button>
@@ -860,7 +860,7 @@ export default function LogViewer() {
                                     className="px-2 py-1 text-xs font-medium rounded border border-[var(--border)] text-[var(--foreground-muted)] hover:bg-[var(--surface-hover)] transition-colors"
                                     title={`Pages ${groupEnd + 1}–${Math.min(groupEnd + groupSize, totalPages)}`}
                                 >
-                                     →
+                                    →
                                 </button>
                             )}
                         </div>

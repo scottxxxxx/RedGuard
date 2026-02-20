@@ -31,6 +31,6 @@ app.use('/api/troubleshoot', troubleshootRoutes);
 const apiRoutes = require('./routes/api');
 app.use('/api', apiRoutes);
 
-app.listen(PORT, () => {
+app.listen(PORT, '0.0.0.0', () => {
   console.log(`Server is running on port ${PORT}`);
 });

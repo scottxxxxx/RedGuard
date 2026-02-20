@@ -67,15 +67,6 @@ jobs:
           build-args: |
             NEXT_PUBLIC_API_URL=${{ env.API_URL }}
 
-      - name: Build and Push Bot-Backup Image
-        uses: docker/build-push-action@v5
-        with:
-          context: ./services/bot-backup
-          push: true
-          tags: |
-            ghcr.io/${{ env.REPO_LC }}/bot-backup:latest
-            ghcr.io/${{ env.REPO_LC }}/bot-backup:${{ env.TAG_VERSION }}
-
       # ------------------------------------------------------------------
       # 3. Deploy to GCP Compute Engine via SSH
       # ------------------------------------------------------------------
@@ -143,20 +134,8 @@ jobs:
                   - NODE_ENV=production
                   - PORT=3001
                   - DATABASE_URL=file:/data/prod.db
-                  - BOT_BACKUP_SERVICE_URL=http://bot-backup:3005
                 volumes:
                   - redguard_data:/data
-                depends_on:
-                  - bot-backup
-
-              bot-backup:
-                image: ghcr.io/${{ env.REPO_LC }}/bot-backup:latest
-                restart: unless-stopped
-                expose:
-                  - "3005"
-                environment:
-                  - NODE_ENV=production
-                  - PORT=3005
               
               client:
                 image: ghcr.io/${{ env.REPO_LC }}/client:latest
