@@ -52,9 +52,9 @@ server/dev.db-journal
 *.swo
 *~
 
-# Claude Code (keep CLAUDE.md for project instructions)
+# Claude Code
 .claude/
-!.claude/CLAUDE.md
+AGENT.md
 
 # Docker
 redguard_images.tar
