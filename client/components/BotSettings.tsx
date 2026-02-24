@@ -1,6 +1,7 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification } from '../contexts/NotificationContext';
+import { getApiUrl } from '@/utils/api';
 
 export type BotConfig = {
     clientId: string;
@@ -28,10 +29,10 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
     const { showToast } = useNotification();
     const [showSecret, setShowSecret] = useState(false);
     const [config, setConfig] = useState<BotConfig>({
-        clientId: '***REMOVED_KORE_CLIENT_ID***',
-        clientSecret: '***REMOVED_SECRET***',
+        clientId: '',
+        clientSecret: '',
         botId: '',
-        webhookUrl: 'https://platform.kore.ai/chatbot/v2/webhook/',
+        webhookUrl: '',
         host: 'platform.kore.ai',
         inspectorClientId: '',
         inspectorClientSecret: ''
@@ -48,7 +49,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
     }, []);
 
     const initializeChat = async (currentConfig: BotConfig) => {
-        const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
+        const apiUrl = `${getApiUrl()}/chat/connect`;
         const res = await fetch(apiUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -122,7 +123,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
         }
 
         try {
-            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/validate`;
+            const apiUrl = `${getApiUrl()}/kore/validate`;
 
             // Add 30-second timeout to validation request (increased for slower network connections)
             const controller = new AbortController();

@@ -3,12 +3,12 @@
 # Configuration from server/.env (or defaults)
 # Using values found in your server/.env for convenience
 # These are likely your test bot credentials
-KORE_HOST="platform.kore.ai"
-# ... (in loop)
-    STATUS_URL="https://${KORE_HOST}/api/public/bot/${BOT_ID}/export/${EXPORT_ID}"
-BOT_ID="***REMOVED_KORE_BOT_ID***"
-CLIENT_ID="***REMOVED_KORE_CLIENT_ID***"
-CLIENT_SECRET="***REMOVED_SECRET***"
+# Load from environment: export KORE_HOST, BOT_ID, CLIENT_ID, CLIENT_SECRET before running
+# Or create a .env file and source it: source server/.env
+KORE_HOST="${KORE_HOST:-platform.kore.ai}"
+BOT_ID="${BOT_ID:?Error: BOT_ID not set}"
+CLIENT_ID="${CLIENT_ID:?Error: CLIENT_ID not set}"
+CLIENT_SECRET="${CLIENT_SECRET:?Error: CLIENT_SECRET not set}"
 
 # Function to generate JWT using Python (requires python3 and pyjwt)
 generate_jwt() {

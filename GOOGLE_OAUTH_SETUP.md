@@ -32,7 +32,7 @@ Visit: https://console.cloud.google.com/
 4. Name: **RedGuard Web Client**
 5. Under "Authorized redirect URIs", click "+ ADD URI" and add:
    - `http://localhost:3000/api/auth/callback/google`
-   - `http://***REMOVED_IP***/api/auth/callback/google`
+   - `https://your-production-domain.com/api/auth/callback/google`
 6. Click "CREATE"
 7. Copy the **Client ID** and **Client Secret**
 
@@ -63,11 +63,11 @@ npm run dev
 When deploying to GCP, you'll need to set the same environment variables on your server:
 
 ```bash
-# On your GCP VM or in deployment config
-GOOGLE_CLIENT_ID=same-as-above
-GOOGLE_CLIENT_SECRET=same-as-above
-NEXTAUTH_SECRET=***REMOVED_SECRET***
-NEXTAUTH_URL=http://***REMOVED_IP***
+# On your production server or in deployment config
+GOOGLE_CLIENT_ID=your-google-client-id
+GOOGLE_CLIENT_SECRET=your-google-client-secret
+NEXTAUTH_SECRET=generate-with-openssl-rand-base64-32
+NEXTAUTH_URL=https://your-production-domain.com
 ```
 
 ## Troubleshooting

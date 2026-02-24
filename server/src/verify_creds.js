@@ -2,10 +2,11 @@ const jwt = require('jsonwebtoken');
 const axios = require('axios');
 const { v4: uuidv4 } = require('uuid');
 
-const clientId = "***REMOVED_KORE_CLIENT_ID***"; // UPDATED!
-const clientSecret = "***REMOVED_SECRET***"; // UPDATED!
-const botId = "***REMOVED_KORE_BOT_ID***";
-const host = "platform.kore.ai"; // UPDATED (from webhook)
+// Load from environment variables or pass as CLI args
+const clientId = process.env.KORE_CLIENT_ID || "";
+const clientSecret = process.env.KORE_CLIENT_SECRET || "";
+const botId = process.env.KORE_BOT_ID || "";
+const host = process.env.KORE_HOST || "platform.kore.ai";
 
 async function test() {
     console.log("Generating JWT...");

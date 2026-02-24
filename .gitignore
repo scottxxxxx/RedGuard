@@ -68,6 +68,9 @@ build/
 coverage/
 .nyc_output/
 
+# Bot definition exports (contain bot IDs)
+appDefinition.json
+
 # Misc
 .cache/
 .temp/
