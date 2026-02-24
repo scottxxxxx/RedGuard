@@ -1,6 +1,13 @@
-# RedGuard
+<p align="center">
+  <img src="client/public/logo-transparent.png" alt="RedGuard" width="200" />
+</p>
 
-AI safety verification platform for Kore.ai XO Platform chatbots. Connect your bot, define guardrail policies, chat with it live, and have an LLM judge evaluate every response against your configured guardrails.
+<h1 align="center">RedGuard</h1>
+
+<p align="center">
+  AI safety verification platform for Kore.ai XO Platform chatbots.<br/>
+  Connect your bot, define guardrail policies, chat with it live, and have an LLM judge evaluate every response against your configured guardrails.
+</p>
 
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue.svg)](LICENSE)
 
