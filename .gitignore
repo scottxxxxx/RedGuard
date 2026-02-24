@@ -56,6 +56,10 @@ server/dev.db-journal
 .claude/
 AGENT.md
 
+# Bot exports and data files
+bot_export.*
+*.zip
+
 # Docker
 redguard_images.tar
 *.tar
