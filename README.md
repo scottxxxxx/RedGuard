@@ -85,8 +85,6 @@ cd RedGuard
 
 ```bash
 cd server
-cp .env.example .env
-# Edit .env with your Kore.ai credentials and LLM API key(s)
 npm install
 npx prisma db push
 npm run dev
@@ -99,12 +97,12 @@ The server starts on http://localhost:3001.
 ```bash
 cd client
 cp .env.example .env.local
-# Edit .env.local -- see Authentication section below
+# Edit .env.local if using Google OAuth -- see Authentication section below
 npm install
 npm run dev
 ```
 
-The client starts on http://localhost:3000.
+The client starts on http://localhost:3000. Kore.ai bot credentials and LLM API keys are configured in the UI.
 
 ## Docker
 
@@ -126,24 +124,14 @@ The production compose includes a Caddy reverse proxy on ports 80/443 with autom
 
 ## Environment Variables
 
+Kore.ai bot credentials and LLM API keys are all configured through the UI — no `.env` setup needed for those.
+
 ### Server (`server/.env`)
 
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `PORT` | No | Server port (default: `3001`) |
-| `DATABASE_URL` | Yes | SQLite path, e.g. `file:./dev.db` |
-| `KORE_WEBHOOK_URL` | Yes | Kore.ai bot webhook URL |
-| `KORE_CLIENT_ID` | Yes | Kore.ai OAuth client ID |
-| `KORE_CLIENT_SECRET` | Yes | Kore.ai OAuth client secret |
-| `KORE_BOT_ID` | Yes | Kore.ai bot ID |
-| `ANTHROPIC_API_KEY` | No* | Claude API key |
-| `OPENAI_API_KEY` | No* | OpenAI API key |
-| `GEMINI_API_KEY` | No* | Google Gemini API key |
-| `DEEPSEEK_API_KEY` | No | DeepSeek API key |
-| `QWEN_API_KEY` | No | Qwen API key |
-| `KIMI_API_KEY` | No | Kimi/Moonshot API key |
-
-*At least one LLM provider API key is required for evaluations.
+| `DATABASE_URL` | No | SQLite path (default: `file:../dev.db`) |
 
 ### Client (`client/.env.local`)
 
