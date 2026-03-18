@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from 'react';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification } from '../contexts/NotificationContext';
 import { getApiUrl } from '@/utils/api';
 
 export type BotConfig = {
