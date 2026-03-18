@@ -1,6 +1,5 @@
 const axios = require('axios');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+const { createKoreJwtFactory } = require('./kore-jwt');
 
 class KoreService {
     constructor() {
@@ -16,7 +15,6 @@ class KoreService {
 
     generateJWT(configOverride = {}) {
         // Only use env vars if NO override config is provided at all
-        // If configOverride exists, use ONLY those values (don't fall back to env)
         const useEnvFallback = !configOverride || Object.keys(configOverride).length === 0;
 
         const clientId = useEnvFallback ? this.clientId : configOverride.clientId;
@@ -26,20 +24,7 @@ class KoreService {
             throw new Error("Missing Kore.AI Client ID or Secret");
         }
 
-        // Standard JWT payload for Kore.AI
-        const payload = {
-            iat: Math.floor(Date.now() / 1000),
-            jti: uuidv4(),
-            aud: "https://idproxy.kore.ai/authorize",
-            iss: clientId,
-            isAnonymous: false
-        };
-
-        // We sign with the client secret
-        return (userId) => {
-            const tokenPayload = { ...payload, sub: userId };
-            return jwt.sign(tokenPayload, clientSecret, { algorithm: 'HS256' });
-        };
+        return createKoreJwtFactory(clientId, clientSecret);
     }
 
     async sendMessage(userId, messageDetails, sessionDetails = { new: true }, configOverride = null) {

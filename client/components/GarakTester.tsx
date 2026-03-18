@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect, useRef } from 'react';
+import { getApiUrl } from '@/utils/api';
 
 interface GarakTesterProps {
     botId?: string;
@@ -19,7 +20,7 @@ export default function GarakTester({ botId }: GarakTesterProps) {
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
     useEffect(() => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         // Fetch available probes
         fetch(`${apiUrl}/garak/probes`)
             .then(res => res.json())
@@ -44,7 +45,7 @@ export default function GarakTester({ botId }: GarakTesterProps) {
         setIsRunning(true);
         setLogs(prev => [...prev, `Initializing Garak scan for '${probes[selectedProbe].label}'...`]);
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const response = await fetch(`${apiUrl}/garak/scan`, {
                 method: 'POST',

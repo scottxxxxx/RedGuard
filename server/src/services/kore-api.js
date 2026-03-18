@@ -1,21 +1,14 @@
 const axios = require('axios');
-const jwt = require('jsonwebtoken');
-const { v4: uuidv4 } = require('uuid');
+const { generateKoreJwt } = require('./kore-jwt');
 
 class KoreApiService {
     generateJWT(clientId, clientSecret, userId) {
-        const payload = {
-            appId: clientId,  // Required for API authentication
-            iat: Math.floor(Date.now() / 1000),
-            exp: Math.floor(Date.now() / 1000) + 3600,
-            jti: uuidv4(),
-            iss: clientId,
+        return generateKoreJwt(clientId, clientSecret, {
             sub: userId || "redguard_admin",
-            aud: "https://idproxy.kore.ai/authorize",
-        };
-        console.log(`[DEBUG] JWT Payload:`, JSON.stringify(payload, null, 2));
-        const token = jwt.sign(payload, clientSecret, { algorithm: 'HS256' });
-        return token;
+            includeAppId: true,
+            includeJti: true,
+            includeExpiry: true
+        });
     }
 
     async getLLMUsageLogs(config, filters) {
@@ -222,6 +215,45 @@ class KoreApiService {
                 throw new Error(`Credential validation failed: ${errorMsg}. Gen AI Logs API also failed: ${pingError.message}`);
             }
         }
+    }
+
+    /**
+     * Save LLM usage logs to the database via Prisma upsert.
+     * Extracted from /api/kore/llm-logs route handler.
+     */
+    async saveLLMLogs(logs, botConfig, prisma) {
+        if (!logs || !Array.isArray(logs)) return;
+
+        const savePromises = logs.map(log => {
+            const koreId = log._id || log.id || `${log.sessionId}-${log.timestamp}`;
+
+            return prisma.koreLLMLog.upsert({
+                where: { koreId },
+                update: {},
+                create: {
+                    koreId,
+                    timestamp: log['start Date'] ? new Date(log['start Date']) : new Date(),
+                    sessionId: log['Session ID'],
+                    featureName: log['Feature Name '] || log.Feature,
+                    model: log.Integration || log['Model Name'] || log.Model,
+                    status: log.Status,
+                    description: log.Description,
+                    requestPayload: log['Payload Details']?.['Request Payload'] ? JSON.stringify(log['Payload Details']['Request Payload']) : null,
+                    responsePayload: log['Payload Details']?.['Response Payload'] ? JSON.stringify(log['Payload Details']['Response Payload']) : null,
+                    inputTokens: 0,
+                    outputTokens: 0,
+                    totalTokens: 0,
+                    botId: botConfig.botId,
+                    userId: botConfig.userId,
+                    channelUserId: log['User ID']
+                }
+            }).catch(err => {
+                console.error("Failed to save log:", err.message);
+                return null;
+            });
+        });
+
+        await Promise.all(savePromises);
     }
 }
 

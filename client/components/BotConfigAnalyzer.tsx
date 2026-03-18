@@ -1,5 +1,6 @@
 "use client";
 import { useState } from 'react';
+import { getApiUrl } from '@/utils/api';
 
 interface MatchResult {
     path: string;
@@ -81,7 +82,7 @@ export default function BotConfigAnalyzer() {
         setMatches(results);
 
         // 2. Server-side Extraction
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const response = await fetch(`${apiUrl}/evaluate/analyze-config`, {
                 method: 'POST',

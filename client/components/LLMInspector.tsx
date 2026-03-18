@@ -1,6 +1,7 @@
 "use client";
 import { useState } from 'react';
 import { BotConfig } from './BotSettings';
+import { getApiUrl } from '@/utils/api';
 
 interface Props {
     botConfig: BotConfig | null;
@@ -33,7 +34,7 @@ export default function LLMInspector({ botConfig, userId }: Props) {
 
             console.log("Fetching logs with filters:", filters); // Debugging
 
-            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/llm-logs`;
+            const apiUrl = `${getApiUrl()}/kore/llm-logs`;
             console.log("Fetching from:", apiUrl);
 
             const res = await fetch(apiUrl, {

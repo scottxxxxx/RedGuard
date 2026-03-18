@@ -1,7 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { CompositeGuardrailConfig } from '../app/page';
 import { BotConfig } from './BotSettings';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification } from '../contexts/NotificationContext';
+import { getApiUrl } from '@/utils/api';
 
 interface Props {
     config: CompositeGuardrailConfig | null;
@@ -63,7 +64,7 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
     const generateAttack = async (type: string) => {
         setLoading(true);
         setShowAttackMenu(false);
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const res = await fetch(`${apiUrl}/garak/prompt?category=${type}`);
             if (!res.ok) throw new Error('Failed to fetch prompt');
@@ -97,7 +98,7 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
             // Let's add a local system message if key is missing but guardrails are on
         }
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         const userMsg = input;
         const isAttack = userMsg === lastGeneratedAttack;
         const attackCategory = isAttack ? lastAttackCategory : null;
@@ -311,7 +312,7 @@ export default function ChatConsole({ config, botConfig, onInteractionUpdate, me
 
                             try {
                                 // Start a fresh session with the bot
-                                const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/chat/connect`;
+                                const apiUrl = `${getApiUrl()}/chat/connect`;
                                 const res = await fetch(apiUrl, {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },

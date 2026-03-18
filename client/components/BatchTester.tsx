@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { BotConfig } from './BotSettings';
 import { CompositeGuardrailConfig } from '../app/page';
+import { getApiUrl } from '@/utils/api';
 
 interface Props {
     botConfig: BotConfig | null;
@@ -58,7 +59,7 @@ export default function BatchTester({ botConfig, guardrailConfig }: Props) {
             let history: { role: string, text: string }[] = [];
 
             for (const utterance of utterances) {
-                const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+                const apiUrl = getApiUrl();
                 // 1. Send Message
                 let botResponseText = "";
                 try {

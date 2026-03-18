@@ -3,6 +3,7 @@ version: '3.8'
 services:
   server:
     build: ./server
+    restart: always
     ports:
       - "3001:3001"
     volumes:
@@ -18,6 +19,7 @@ services:
 
   client:
     build: ./client
+    restart: always
     ports:
       - "3000:3000"
     command: npm run dev

@@ -1,5 +1,5 @@
 const axios = require('axios');
-const jwt = require('jsonwebtoken');
+const { generateKoreJwt } = require('./kore-jwt');
 
 // In-memory job store (replace with Redis/DB for production persistence)
 const jobs = new Map();
@@ -132,14 +132,12 @@ class BackupService {
     }
 
     static generateJwt(clientId, clientSecret) {
-        return jwt.sign({
+        return generateKoreJwt(clientId, clientSecret, {
             sub: clientId,
-            iat: Math.floor(Date.now() / 1000),
-            exp: Math.floor(Date.now() / 1000) + 3600,
-            aud: 'https://idproxy.kore.ai/authorize',
-            iss: clientId,
-            appId: clientId
-        }, clientSecret, { algorithm: 'HS256' });
+            includeAppId: true,
+            includeJti: false,
+            includeExpiry: true
+        });
     }
 
     static async getJobStatus(jobId) {
@@ -152,6 +150,95 @@ class BackupService {
             Object.assign(job, updates);
             jobs.set(jobId, job);
         }
+    }
+
+    /**
+     * Download a completed export zip, extract the App Definition JSON,
+     * and run it through the bot-config-analyzer.
+     * Returns { guardrails } on success, throws on failure.
+     */
+    static async downloadAndAnalyze(jobId, downloadUrl) {
+        const AdmZip = require('adm-zip');
+        const botConfigAnalyzer = require('./bot-config-analyzer');
+
+        console.log(`[Backup Guardrails] Job ${jobId} completed. Downloading zip...`);
+
+        const zipResponse = await axios.get(downloadUrl, {
+            responseType: 'arraybuffer',
+            timeout: 60000
+        });
+
+        const zip = new AdmZip(Buffer.from(zipResponse.data));
+        const zipEntries = zip.getEntries();
+
+        // Find the App Definition JSON file
+        let targetEntry = zipEntries.find(entry =>
+            !entry.isDirectory &&
+            entry.entryName.endsWith('.json') &&
+            (entry.entryName.toLowerCase().includes('botdefinition') ||
+             entry.entryName.toLowerCase().includes('appdefinition'))
+        );
+
+        // Fallback: largest JSON file
+        if (!targetEntry) {
+            const jsonEntries = zipEntries.filter(entry =>
+                !entry.isDirectory && entry.entryName.endsWith('.json')
+            );
+            if (jsonEntries.length > 0) {
+                targetEntry = jsonEntries.reduce((largest, entry) =>
+                    entry.header.size > largest.header.size ? entry : largest
+                );
+            }
+        }
+
+        if (!targetEntry) {
+            throw new Error('No JSON file found in the exported zip');
+        }
+
+        console.log(`[Backup Guardrails] Extracting: ${targetEntry.entryName}`);
+        const jsonContent = JSON.parse(zip.readAsText(targetEntry));
+        const analysis = botConfigAnalyzer.analyze(jsonContent);
+
+        const guardrails = {
+            enabledGuardrails: analysis.enabledGuardrails,
+            topics: analysis.topics,
+            regexPatterns: analysis.regexPatterns,
+            descriptions: analysis.descriptions,
+            featureDetails: analysis.featureDetails
+        };
+
+        // Cache result so subsequent polls don't re-download
+        this.updateJob(jobId, {
+            status: 'analyzed',
+            guardrails,
+            downloadUrl: null
+        });
+
+        return guardrails;
+    }
+
+    /**
+     * Derive platform and bots hosts from a generic Kore host string.
+     */
+    static deriveHosts(host) {
+        let platformHost = 'platform.kore.ai';
+        let botsHost = 'bots.kore.ai';
+
+        if (host) {
+            const hostClean = host.replace(/^https?:\/\//, '').replace(/\/+$/, '');
+            if (hostClean.includes('bots.')) {
+                botsHost = hostClean;
+                platformHost = hostClean.replace('bots.', 'platform.');
+            } else if (hostClean.includes('platform.')) {
+                platformHost = hostClean;
+                botsHost = hostClean.replace('platform.', 'bots.');
+            } else {
+                platformHost = hostClean;
+                botsHost = hostClean;
+            }
+        }
+
+        return { platformHost, botsHost };
     }
 }
 

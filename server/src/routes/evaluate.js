@@ -66,20 +66,22 @@ router.post('/preview', async (req, res) => {
     }
 });
 
-const botConfigAnalyzer = require('../services/bot-config-analyzer');
+const platforms = require('../services/bot-platforms');
 
 const fs = require('fs');
 const path = require('path');
 
 router.post('/analyze-config', async (req, res) => {
-    const { botConfig } = req.body;
+    const { botConfig, platform: platformName } = req.body;
 
     if (!botConfig) {
         return res.status(400).json({ error: "Missing required field: botConfig" });
     }
 
     try {
-        const analysis = botConfigAnalyzer.analyze(botConfig);
+        // Use the specified platform's analyzer, defaulting to Kore.ai
+        const platform = (platformName && platforms.get(platformName)) || platforms.getDefault();
+        const analysis = platform.analyzeConfig(botConfig);
         res.json(analysis);
     } catch (error) {
         const logPath = path.join(__dirname, '../../server_debug.log');

@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification } from '../contexts/NotificationContext';
 
 interface Props {
     isOpen: boolean;
@@ -163,15 +163,18 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center">
+        <div style={{ position: 'fixed', inset: 0, zIndex: 9999, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
             {/* Backdrop */}
             <div
-                className="absolute inset-0 bg-black/50 backdrop-blur-sm"
-                onClick={onClose}
+                style={{ position: 'absolute', inset: 0, backgroundColor: 'rgba(0,0,0,0.6)', backdropFilter: 'blur(4px)' }}
+                onMouseDown={onClose}
             />
 
             {/* Modal */}
-            <div className="relative w-[90vw] max-w-4xl h-[80vh] bg-[var(--surface)] rounded-xl shadow-2xl flex flex-col overflow-hidden animate-fadeIn">
+            <div
+                style={{ position: 'relative', width: '95vw', maxWidth: '1400px', height: '90vh', backgroundColor: 'var(--surface)', borderRadius: '12px', boxShadow: '0 25px 50px rgba(0,0,0,0.5)', display: 'flex', flexDirection: 'column', overflow: 'hidden', zIndex: 10000 }}
+                onMouseDown={(e) => e.stopPropagation()}
+            >
                 {/* Header */}
                 <div className="flex items-center justify-between p-4 border-b border-[var(--border)] bg-[var(--background)]">
                     <div className="flex items-center gap-3">
@@ -360,7 +363,7 @@ export default function PromptEditorModal({ isOpen, onClose, value, onChange, on
                                         value={systemPrompt || ''}
                                         onChange={(e) => onSystemPromptChange?.(e.target.value)}
                                         placeholder="Enter system instructions for the evaluation model..."
-                                        className="w-full text-sm font-mono h-24 border-0 border-t border-amber-100 dark:border-amber-500/20 p-4 focus:ring-0 focus:outline-none bg-amber-50/30 dark:bg-amber-500/5 text-[var(--foreground)] resize-y"
+                                        className="w-full text-sm font-mono min-h-[120px] max-h-[40vh] border-0 border-t border-amber-100 dark:border-amber-500/20 p-4 focus:ring-0 focus:outline-none bg-amber-50/30 dark:bg-amber-500/5 text-[var(--foreground)] resize-y"
                                         spellCheck={false}
                                     />
                                 )}

@@ -2,6 +2,7 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { useUser } from '@/contexts/UserContext';
 import { EvaluationResultsView, parseEvaluationOutput } from './EvaluationResultsView';
+import { getApiUrl } from '@/utils/api';
 
 interface EvaluationRun {
     id: string;
@@ -315,7 +316,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
     const fetchRuns = useCallback(async () => {
         if (!userId) return; // Don't fetch if no user ID
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const res = await fetch(`${apiUrl}/runs?userId=${userId}`);
             if (res.ok) {
@@ -351,7 +352,7 @@ export default function RunHistory({ botId }: RunHistoryProps) {
 
     const clearAllRuns = async () => {
         if (!confirm('Are you sure you want to clear all run history?')) return;
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             await fetch(`${apiUrl}/runs`, { method: 'DELETE' });
             setRuns([]);

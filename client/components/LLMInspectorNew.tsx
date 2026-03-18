@@ -2,6 +2,7 @@
 import { useState, useImperativeHandle, forwardRef, useCallback, useEffect, useRef, useMemo } from 'react';
 import { createPortal } from 'react-dom';
 import { BotConfig } from './BotSettings';
+import { getApiUrl } from '@/utils/api';
 
 export interface ChatMessage {
     role: 'user' | 'bot' | 'evaluation';
@@ -101,7 +102,7 @@ const LLMInspector = forwardRef<LLMInspectorRef, Props>(({ botConfig, userId, ko
                 limit: "50"
             };
 
-            const apiUrl = `${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api'}/kore/llm-logs`;
+            const apiUrl = `${getApiUrl()}/kore/llm-logs`;
 
             const res = await fetch(apiUrl, {
                 method: 'POST',

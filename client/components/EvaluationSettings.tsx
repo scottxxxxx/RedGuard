@@ -2,7 +2,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { LLMConfig } from '../types/config';
 import PromptEditorModal from './PromptEditorModal';
-import { useNotification } from '../context/NotificationContext';
+import { useNotification } from '../contexts/NotificationContext';
+import { getApiUrl } from '@/utils/api';
 
 export type ProviderKeys = Record<string, string>;
 
@@ -178,7 +179,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
         customPrompt.includes('{{kore_genai_logs}}');
 
     const fetchDefaultTemplates = async () => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const res = await fetch(`${apiUrl}/prompts/defaults`);
             if (res.ok) {
@@ -203,7 +204,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
     }, []);
 
     const fetchSavedPrompts = async () => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const res = await fetch(`${apiUrl}/prompts`);
             if (res.ok) {
@@ -214,7 +215,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
     };
 
     const handleLoadDefault = async (targetProvider?: string, targetModel?: string) => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         const p = targetProvider || provider;
         const m = targetModel || model;
         try {
@@ -233,7 +234,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
     };
 
     const handleLoadDefaultByKey = async (key: string) => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const res = await fetch(`${apiUrl}/prompts/defaults/${encodeURIComponent(key)}`);
             if (res.ok) {
@@ -277,7 +278,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
             return false;
         }
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const res = await fetch(`${apiUrl}/prompts`, {
                 method: 'POST',
@@ -324,7 +325,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
 
         if (!confirmed) return false;
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             // 1. Delete old
             await fetch(`${apiUrl}/prompts/${currentPromptId}`, { method: 'DELETE' });
@@ -365,7 +366,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
 
         if (!confirmed) return;
 
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             await fetch(`${apiUrl}/prompts/${id}`, { method: 'DELETE' });
             await fetchSavedPrompts();
@@ -392,7 +393,8 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
     };
 
     return (
-        <div className="card p-6 h-full">
+        <>
+        <div className="card p-6 h-full" style={isEditorOpen ? { display: 'none' } : undefined}>
             <div className="flex items-center gap-2 mb-4 pb-3 border-b border-[var(--border)]">
                 <div className="w-6 h-6 rounded-md bg-[var(--primary-50)] flex items-center justify-center">
                     <svg className="w-4 h-4 text-[var(--primary-600)]" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -589,8 +591,8 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
                                 )}
                             </div>
 
-                            {/* Prompt Editor Area */}
-                            <div className="relative border border-[var(--border)] rounded-lg overflow-hidden">
+                            {/* Inline editor + validation */}
+                            <div className={`relative border border-[var(--border)] rounded-lg overflow-hidden ${isEditorOpen ? 'invisible h-0 overflow-hidden border-0 m-0 p-0' : ''}`} style={isEditorOpen ? { maxHeight: 0, margin: 0, padding: 0, border: 'none' } : undefined}>
                                 {/* Expand button — top-right corner */}
                                 <button
                                     onClick={() => setIsEditorOpen(true)}
@@ -653,7 +655,7 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
                             </div>
 
                             {/* Validation Indicators */}
-                            <div className="bg-[var(--background)] rounded-lg p-3 text-[10px] border border-[var(--border)] shadow-inner">
+                            <div className={`bg-[var(--background)] rounded-lg p-3 text-[10px] border border-[var(--border)] shadow-inner ${isEditorOpen ? 'hidden' : ''}`}>
                                 <div className="flex items-center justify-between mb-2">
                                     <p className="font-bold text-[var(--foreground-muted)] uppercase tracking-tighter">Prompt Requirements</p>
                                     {(() => {
@@ -696,11 +698,13 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
                                     </div>
                                 )}
                             </div>
+                            {/* Validation also hidden when modal open */}
                         </div>
                     )}
                 </div>
             </div>
 
+        </div>
             <PromptEditorModal
                 isOpen={isEditorOpen}
                 onClose={() => setIsEditorOpen(false)}
@@ -712,6 +716,6 @@ export default function EvaluationSettings({ onConfigChange, onPromptTemplateCha
                 systemPromptEnabled={systemPromptEnabled}
                 onSystemPromptEnabledChange={setSystemPromptEnabled}
             />
-        </div>
+        </>
     );
 }

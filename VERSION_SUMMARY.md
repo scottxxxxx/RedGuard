@@ -1,107 +1,60 @@
-# RedGuard v0.2.0 - Release Summary
+# RedGuard v0.4.2 - Release Summary
 
-**Release Date:** February 10, 2025
-**Previous Version:** 0.1.7
+**Release Date:** March 17, 2026
+**Previous Version:** 0.4.1
 
-## 🎯 Key Highlights
+## Key Highlights
 
-### 1. Smart Bot Configuration
-**Two-way Bot ID workflow** - The biggest UX improvement in this release:
-- Paste a complete webhook URL → Bot ID extracts automatically
-- OR enter Bot ID → Automatically appends to base webhook URL
-- Bot ID field becomes read-only when inferred (prevents mismatches)
-- Default starts with: `https://platform.kore.ai/chatbot/v2/webhook/`
+### 1. Full-Screen Prompt Editor Modal
+- Expand button opens a **full-screen modal** (95vw x 90vh, max 1400px wide) instead of the old narrow inline editor
+- Inline editor **hides completely** when modal is open — no more dual-panel conflict
+- Fixed flickering caused by backdrop mouse event leaking through to the modal
+- System Instructions textarea is resizable up to 40% viewport height
 
-### 2. Better Validation & Error Handling
-- **Two-step validation:** Credentials first, then webhook (tells you exactly what's wrong)
-- **Proper HTTP status codes:** 401 (auth), 404 (not found), 503 (unreachable), 500 (error)
-- **Clear error messages** with troubleshooting steps for each scenario
-- **Prevents incomplete connections:** Can't connect without Bot ID
+### 2. Production Deployment
+- Live at **https://redguard.scottguida.com** on GCP (e2-medium, Docker)
+- Nginx Proxy Manager handles SSL/HTTPS with auto-provisioned Let's Encrypt certificates
+- HSTS enabled for all connections
+- Google OAuth published to production — any Google account can sign in
 
-### 3. Enhanced Evaluation Display
-- **Evaluation Metrics section** shows model name prominently
-- **Response time tracking** for all evaluations
-- **Input Tokens** color-coded green to match LLM prompt
-- **Overall Assessment** rating now aligns with pass/fail outcome
+### 3. Bug Fixes
+- **Build failure** — `BotSettings.tsx` had wrong import path for `NotificationContext` (`contexts` → `context`)
+- **LogViewer crash** — `stats.byType` was undefined on fresh databases with no logs
+- **Database tables missing** — `prisma db push` required after fresh container deployments
 
-### 4. Fixed Major Bugs
-- ✅ Stale data no longer shows after validation failures
-- ✅ Regex guardrail correctly shows "Not Tested" when disabled
-- ✅ Errors no longer suppressed (proper toast notifications)
-- ✅ Overall Assessment parsing handles Anthropic API format
-
-## 📊 What Changed
+## What Changed
 
 | Component | Change | Impact |
 |-----------|--------|--------|
-| BotSettings | Two-way Bot ID workflow | Much easier bot configuration |
-| Validation | Two-step process (creds → webhook) | Better error diagnosis |
-| Error Codes | Proper HTTP status (401/404/503/500) | Clear error understanding |
-| RunHistory | Evaluation Metrics section | Better visibility of model/performance |
-| Evaluation | Overall assessment alignment | More accurate ratings |
-| Console | Auto-clear on connect | No stale data confusion |
+| PromptEditorModal | Full-screen with inline styles | Reliable, no Tailwind JIT issues |
+| EvaluationSettings | Card hides when modal open | No dual-panel flickering |
+| BotSettings | Fixed import path | Build succeeds |
+| LogViewer | Optional chaining on stats | No crash on empty DB |
+| Infrastructure | GCP + NPM + Docker | Production deployment |
+| OAuth | Published to production | Public access |
 
-## 🔧 Technical Details
+## Technical Details
 
-### Database Changes
-- Added `latencyMs` field to EvaluationRun table
-- Added `model` field to EvaluationRun table
-
-### API Changes
-- `/api/kore/validate` now returns proper status codes (not always 401)
-- Validation performs actual webhook test (not just credential check)
+### Infrastructure
+- **GCP VM:** `web-gateway` (e2-medium, us-central1-a), static IP `35.239.227.192`
+- **Docker Compose:** `docker-compose.gateway.yml` with `proxy-tier` network
+- **Containers:** `redguard_server` (port 3001), `redguard_client` (port 3000)
+- **Reverse Proxy:** Nginx Proxy Manager routes `redguard.scottguida.com` → `redguard_client:3000`
+- **Auth env vars:** Stored in `.env` file on server (not in repo)
 
 ### Component Updates
-- `BotSettings.tsx` - Complete refactor of validation and Bot ID handling
-- `RunHistory.tsx` - Added Evaluation Metrics section with model display
-- `EvaluationInspector.tsx` - Updated Overall Assessment extraction
-- `page.tsx` - Version badge updated to v0.2.0
+- `PromptEditorModal.tsx` — Pure inline styles for modal container, z-index 9999/10000
+- `EvaluationSettings.tsx` — Fragment wrapper, card hidden via `display: none` when modal open
+- `BotSettings.tsx` — Import path fix
+- `LogViewer.tsx` — Optional chaining on `stats.byType`
 
-## 📈 Metrics
+## Upgrade Path
 
-**Lines Changed:** ~500+
-**Files Modified:** 15+
-**New Files:** 3 (CHANGELOG.md, AI_ASSISTANT_GUIDE.md, VERSION_SUMMARY.md)
-**Bug Fixes:** 6 major issues resolved
+No breaking changes. Existing configurations work as-is. The prompt editor expand button now opens a proper full-screen modal.
 
-## 🚀 Upgrade Path
-
-No breaking changes - existing configurations will work as-is. New features activate automatically:
-- Existing webhook URLs will auto-extract Bot ID
-- Old evaluations display properly with new metrics section
-- Error handling improvements apply to all new connections
-
-## 📝 Documentation
-
-- ✅ **CHANGELOG.md** - Full version history
-- ✅ **AI_ASSISTANT_GUIDE.md** - Comprehensive guide for AI assistants (Gemini, ChatGPT, Claude)
-- ✅ **CLAUDE.md** - Updated with v0.2.0 info
-- ✅ **VERSION_SUMMARY.md** - This file
-
-## 🎯 Next Steps
-
-Potential features for v0.3.0:
-- Batch testing from CSV files
-- Advanced attack generation (jailbreak prompts)
-- Custom prompt template library
-- Multi-bot comparison view
-- Automated regression testing
-- CI/CD integration
-
-## 🐛 Known Issues
-
-None at this time. All critical bugs from 0.1.7 have been resolved.
-
-## 🙏 Credits
-
-Built with:
-- Next.js 16.1.6
-- React 19.2.3
-- Anthropic Claude API
-- OpenAI API
-- Google Gemini API
-- Kore.ai XO Platform
+For fresh deployments, run `npx prisma db push` inside the server container after first start.
 
 ---
 
-**Questions?** Check the AI_ASSISTANT_GUIDE.md for comprehensive documentation.
+**Live:** https://redguard.scottguida.com
+**Source:** https://github.com/scottxxxxx/RedGuard

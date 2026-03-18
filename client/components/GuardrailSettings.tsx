@@ -1,5 +1,6 @@
 "use client";
 import { useState, useEffect, useRef, useCallback, forwardRef, useImperativeHandle } from 'react';
+import { getApiUrl } from '@/utils/api';
 
 // Custom Dialog Component
 const InfoDialog = ({ isOpen, onClose, title, message }: { isOpen: boolean; onClose: () => void; title: string; message: string }) => {
@@ -202,7 +203,7 @@ const GuardrailSettings = forwardRef<GuardrailSettingsHandle, Props>(function Gu
         setGuardrailSource('fetching');
 
         try {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+            const apiUrl = getApiUrl();
             const startRes = await fetch(`${apiUrl}/kore/backup-guardrails`, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
@@ -353,7 +354,7 @@ const GuardrailSettings = forwardRef<GuardrailSettingsHandle, Props>(function Gu
                                         }
 
                                         // 2. Request logic analysis from backend
-                                        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+                                        const apiUrl = getApiUrl();
                                         console.log("🔄 Sending to backend:", apiUrl);
 
                                         const res = await fetch(`${apiUrl}/evaluate/analyze-config`, {

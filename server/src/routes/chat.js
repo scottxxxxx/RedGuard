@@ -1,11 +1,24 @@
 const express = require('express');
 const router = express.Router();
-const koreService = require('../services/kore-webhook');
-const guardrailService = require('../services/guardrail-logic');
+const platforms = require('../services/bot-platforms');
 const apiLogger = require('../services/api-logger');
 
+/**
+ * Resolve the platform instance from the request body.
+ * Falls back to the default (Kore.ai) when no platform is specified.
+ */
+function resolvePlatform(body) {
+    const platformName = body.platform || body.botConfig?.platform;
+    if (platformName) {
+        const p = platforms.get(platformName);
+        if (!p) throw new Error(`Unknown platform: "${platformName}". Available: ${platforms.list().join(', ')}`);
+        return p;
+    }
+    return platforms.getDefault();
+}
+
 router.post('/send', async (req, res) => {
-    const { message, userId, guardrailConfig, botConfig } = req.body;
+    const { message, userId, botConfig } = req.body;
 
     if (!message) {
         return res.status(400).json({ error: "Message is required" });
@@ -14,51 +27,47 @@ router.post('/send', async (req, res) => {
     const explicitUserId = userId || "test_user_dashboard";
     const startTime = Date.now();
 
+    let platform;
     try {
-        // 1. Send message to Kore.AI (passing dynamic config if present)
-        const kResponse = await koreService.sendMessage(explicitUserId, { type: "text", val: message }, { new: true }, botConfig);
+        platform = resolvePlatform(req.body);
+    } catch (err) {
+        return res.status(400).json({ error: err.message });
+    }
 
-        // 2. Extract Bot Text for evaluation
-        let botText = "";
-        if (kResponse.data && Array.isArray(kResponse.data)) {
-            botText = kResponse.data.map(m => m.val || m.text).join('\n');
-        } else if (kResponse.text) {
-            botText = kResponse.text;
-        }
+    try {
+        const result = await platform.sendMessage(explicitUserId, message, botConfig);
 
-        // Log successful request
         await apiLogger.log({
             userId: explicitUserId,
-            logType: 'kore_chat',
+            logType: `${platform.providerName}_chat`,
             method: 'POST',
-            endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
+            endpoint: botConfig?.webhookUrl || `${platform.providerName}/chat`,
             requestBody: { message, userId: explicitUserId },
             statusCode: 200,
-            responseBody: kResponse,
+            responseBody: result.raw,
             latencyMs: Date.now() - startTime,
             isError: false,
-            provider: 'kore'
+            provider: platform.providerName
         });
 
-        // 4. Return response (Evaluation is now manual)
-        res.json(kResponse);
+        // Return the raw platform response for backward compatibility
+        res.json(result.raw);
 
     } catch (error) {
         console.error("Chat Error:", error.message);
 
-        // Log error
         await apiLogger.log({
             userId: explicitUserId,
-            logType: 'kore_chat',
+            logType: `${platform.providerName}_chat`,
             method: 'POST',
-            endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
+            endpoint: botConfig?.webhookUrl || `${platform.providerName}/chat`,
             requestBody: { message, userId: explicitUserId },
             statusCode: error.response?.status || 500,
             responseBody: error.response?.data,
             latencyMs: Date.now() - startTime,
             isError: true,
             errorMessage: error.message,
-            provider: 'kore'
+            provider: platform.providerName
         });
 
         res.status(500).json({
@@ -73,65 +82,43 @@ router.post('/connect', async (req, res) => {
     const explicitUserId = userId || "test_user_dashboard";
     const startTime = Date.now();
 
+    let platform;
     try {
-        // Send the explicit ON_CONNECT event as per Kore.ai Webhook V2.0 spec
-        const kResponse = await koreService.sendMessage(explicitUserId, { type: "event", val: "ON_CONNECT" }, { new: true }, botConfig);
+        platform = resolvePlatform(req.body);
+    } catch (err) {
+        return res.status(400).json({ error: err.message });
+    }
 
-        // Try to extract bot name from response metadata
-        let botName = null;
-        let sessionId = null;
+    try {
+        const result = await platform.connect(explicitUserId, botConfig);
 
-        // Check various possible locations for bot metadata
-        if (kResponse.botInfo) {
-            botName = kResponse.botInfo.name || kResponse.botInfo.chatBot || kResponse.botInfo.botName;
-        }
-        if (kResponse.metadata) {
-            botName = botName || kResponse.metadata.botName || kResponse.metadata.name;
-        }
-        if (kResponse.context) {
-            botName = botName || kResponse.context.botName;
-        }
-
-        // Extract session ID
-        if (kResponse.sessionId) {
-            sessionId = kResponse.sessionId;
-        } else if (kResponse.session?.id) {
-            sessionId = kResponse.session.id;
-        }
-
-        console.log(`[Connection] Bot Name extracted: ${botName || 'Not found'}`);
-        console.log(`[Connection] Session ID: ${sessionId || 'Not found'}`);
-        console.log(`[Connection] Response keys:`, Object.keys(kResponse));
+        console.log(`[Connection] Bot Name extracted: ${result.botName || 'Not found'}`);
+        console.log(`[Connection] Session ID: ${result.sessionId || 'Not found'}`);
 
         await apiLogger.log({
             userId: explicitUserId,
-            logType: 'kore_connect',
+            logType: `${platform.providerName}_connect`,
             method: 'POST',
-            endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
+            endpoint: botConfig?.webhookUrl || `${platform.providerName}/connect`,
             requestBody: {
                 userId: explicitUserId,
                 action: "initial_connect",
-                botConfig: {
-                    webhookUrl: botConfig?.webhookUrl,
-                    botId: botConfig?.botId,
-                    clientId: botConfig?.clientId,
-                    clientSecret: '[REDACTED]',
-                    host: botConfig?.host
-                }
+                botConfig: platform.redactConfig(botConfig)
             },
             statusCode: 200,
-            responseBody: kResponse,
+            responseBody: result.raw,
             latencyMs: Date.now() - startTime,
             isError: false,
-            provider: 'kore'
+            provider: platform.providerName
         });
 
-        // Add extracted metadata to response
+        // Enrich the raw response with extracted metadata for backward compatibility
         const enrichedResponse = {
-            ...kResponse,
+            ...result.raw,
             _metadata: {
-                botName,
-                sessionId,
+                botName: result.botName,
+                sessionId: result.sessionId,
+                platform: platform.providerName,
                 extractedAt: new Date().toISOString()
             }
         };
@@ -140,29 +127,22 @@ router.post('/connect', async (req, res) => {
     } catch (error) {
         console.error("Connect Error:", error.message);
 
-        // Log connection error
         await apiLogger.log({
             userId: explicitUserId,
-            logType: 'kore_connect',
+            logType: `${platform.providerName}_connect`,
             method: 'POST',
-            endpoint: botConfig?.webhookUrl || 'kore.ai/webhook',
+            endpoint: botConfig?.webhookUrl || `${platform.providerName}/connect`,
             requestBody: {
                 userId: explicitUserId,
                 action: "initial_connect",
-                botConfig: botConfig ? {
-                    webhookUrl: botConfig.webhookUrl,
-                    botId: botConfig.botId,
-                    clientId: botConfig.clientId,
-                    clientSecret: '[REDACTED]',
-                    host: botConfig.host
-                } : null
+                botConfig: platform.redactConfig(botConfig)
             },
             statusCode: error.response?.status || 500,
             responseBody: error.response?.data || { error: error.message },
             latencyMs: Date.now() - startTime,
             isError: true,
             errorMessage: error.message,
-            provider: 'kore'
+            provider: platform.providerName
         });
 
         res.status(500).json({

@@ -1,5 +1,6 @@
 "use client";
 import React, { useState, useEffect } from 'react';
+import { getApiUrl } from '@/utils/api';
 
 interface ApiLog {
     id: string;
@@ -73,7 +74,7 @@ export default function LogViewer() {
     }, [filter, currentPage]);
 
     const fetchLogs = async () => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const params = new URLSearchParams();
             if (filter.logType) params.append('logType', filter.logType);
@@ -134,7 +135,7 @@ export default function LogViewer() {
     }, [logs, sortConfig]);
 
     const fetchStats = async () => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         try {
             const params = new URLSearchParams();
             if (filter.logType) params.append('logType', filter.logType);
@@ -159,7 +160,7 @@ export default function LogViewer() {
     };
 
     const exportLogs = () => {
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         const params = new URLSearchParams();
         if (filter.logType) params.append('logType', filter.logType);
         if (filter.isError) params.append('isError', filter.isError);
@@ -309,10 +310,10 @@ export default function LogViewer() {
                 const maxProviderCount = Math.max(...(stats.byProvider?.map(p => p.count) || [1]), 1);
                 const formatLatency = (ms: number) => ms >= 10000 ? `${(ms / 1000).toFixed(1)}s` : `${ms.toLocaleString()}ms`;
                 const getLatencyColor = (ms: number) => ms < 1000 ? '#059669' : ms < 5000 ? '#d97706' : '#dc2626';
-                const chatCount = stats.byType['kore_chat'] || 0;
-                const evalCount = stats.byType['llm_evaluate'] || 0;
-                const genAiCount = stats.byType['kore_genAI_logs'] || 0;
-                const otherCount = Math.max(0, stats.totalLogs - chatCount - evalCount - genAiCount);
+                const chatCount = stats.byType?.['kore_chat'] || 0;
+                const evalCount = stats.byType?.['llm_evaluate'] || 0;
+                const genAiCount = stats.byType?.['kore_genAI_logs'] || 0;
+                const otherCount = Math.max(0, (stats.totalLogs || 0) - chatCount - evalCount - genAiCount);
                 const koreProviders = stats.byProvider?.filter(p => p.provider !== 'kore') || [];
 
                 return (

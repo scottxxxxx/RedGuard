@@ -415,6 +415,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                             setValidationMessage(null);
 
                             // Validate first (fast, fails early on config errors)
+                            console.log('[BotSettings] Starting validation with config:', JSON.stringify({...config, clientSecret: '***'}));
                             await validateConnection(config);
 
                             // Then initialize chat (slower, but only if validation passed)
@@ -426,7 +427,7 @@ export default function BotSettings({ onConfigChange, onConnect, onSessionReset,
                             ]);
 
                         } catch (err: any) {
-                            console.error('[BotSettings] Connection error:', err);
+                            console.error('[BotSettings] Connection error:', err.message, err.stack);
 
                             // Set validation status to error
                             setValidationStatus('error');

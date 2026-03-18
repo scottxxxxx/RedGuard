@@ -1,0 +1,10 @@
+{
+    "name": "redguard-root",
+    "version": "1.0.0",
+    "scripts": {
+        "test": "npm run test --prefix server",
+        "test:client": "npm run test --prefix client",
+        "test:e2e": "npx playwright test --config=client/playwright.config.ts",
+        "test:all": "npm run test --prefix server && npx playwright test --config=client/playwright.config.ts"
+    }
+}

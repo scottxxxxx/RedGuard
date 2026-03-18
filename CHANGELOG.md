@@ -2,6 +2,30 @@
 
 ---
 
+## [0.4.2] - 2026-03-17
+
+### Full-Screen Prompt Editor & Production Deployment
+
+#### Fixed
+- **NotificationContext import path** — `BotSettings.tsx` imported from `../contexts/` (plural) instead of `../context/` (singular), causing build failures
+- **Prompt Editor modal flickering** — backdrop click handler was firing on mouse move, causing rapid open/close cycles. Fixed with `onMouseDown` + `stopPropagation` pattern
+- **Dual editor conflict** — inline prompt editor and modal were both rendering simultaneously, fighting for focus. Inline editor now hides (`display: none`) when modal is open
+- **LogViewer crash on empty database** — `stats.byType` was undefined when no logs existed. Added optional chaining (`stats.byType?.[]`)
+
+#### Changed
+- **Prompt Editor modal is now full-screen** — expanded from `max-w-4xl` (896px) to `max-width: 1400px`, `95vw` wide, `90vh` tall. Uses inline styles instead of Tailwind classes for reliable rendering
+- **System Instructions textarea** — increased from fixed `h-24` to `min-h-[120px]` with `max-h-[40vh]` for longer prompts
+- **Modal uses z-index 9999/10000** — guaranteed to render above all other UI elements
+
+#### Infrastructure
+- **Production deployment on GCP** — deployed to `e2-medium` VM at `35.239.227.192` via Docker
+- **Nginx Proxy Manager** routing `redguard.scottguida.com` → container
+- **SSL/HTTPS** with Let's Encrypt auto-provisioning + HSTS enabled
+- **Google OAuth published to production** — any Google account can now sign in
+- **Database initialization** — `prisma db push` required on fresh deployments
+
+---
+
 ## [0.3.6] - 2026-02-13
 
 ### Major Evaluation Engine Upgrade

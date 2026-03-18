@@ -11,7 +11,8 @@ env:
   GAR_LOCATION: us-central1
   SERVICE: redguard-server
   REGION: us-central1
-  # This API_URL is used during build time for the client but overridden at runtime in docker-compose
+  # This API_URL is used by the frontend to make requests. 
+  # Nginx Proxy Manager will route redguard.scottguida.com/api directly to the backend server.
   API_URL: https://redguard.scottguida.com/api
 
 jobs:
@@ -103,31 +104,11 @@ jobs:
             cat <<EOF | sudo tee docker-compose.prod.yml > /dev/null
             version: '3.8'
             services:
-              caddy:
-                image: caddy:2-alpine
-                restart: unless-stopped
-                ports:
-                  - "80:80"
-                  - "443:443"
-                volumes:
-                  - caddy_data:/data
-                  - caddy_config:/config
-                # Use a Caddyfile for more complex routing (API vs Client)
-                entrypoint: ["/bin/sh", "-c"]
-                command: 
-                  - |
-                    echo "redguard.scottguida.com {
-                      # Prioritize NextAuth routes to the client
-                      reverse_proxy /api/auth/* client:3000
-                      # Send other API routes to the backend server
-                      reverse_proxy /api/* server:3001
-                      # All strictly frontend routes go to client
-                      reverse_proxy * client:3000
-                    }" > /etc/caddy/Caddyfile
-                    caddy run --config /etc/caddy/Caddyfile
 
               server:
                 image: ghcr.io/${{ env.REPO_LC }}/server:latest
+                container_name: redguard_server
+                restart: unless-stopped
                 expose:
                   - "3001"
                 environment:
@@ -136,9 +117,13 @@ jobs:
                   - DATABASE_URL=file:/data/prod.db
                 volumes:
                   - redguard_data:/data
+                networks:
+                  - proxy-tier
               
               client:
                 image: ghcr.io/${{ env.REPO_LC }}/client:latest
+                container_name: redguard_client
+                restart: unless-stopped
                 expose:
                   - "3000"
                 environment:
@@ -150,11 +135,15 @@ jobs:
                   - GOOGLE_CLIENT_SECRET=${{ secrets.GOOGLE_CLIENT_SECRET }}
                 depends_on:
                   - server
+                networks:
+                  - proxy-tier
+
+            networks:
+              proxy-tier:
+                external: true
 
             volumes:
               redguard_data:
-              caddy_data:
-              caddy_config:
             EOF
 
             # Prune aggressively to free up space (system + volumes)

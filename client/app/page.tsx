@@ -14,9 +14,10 @@ import LLMInspector, { LLMInspectorRef } from "@/components/LLMInspectorNew";
 import ThemeSwitcher from "@/components/ThemeSwitcher";
 import AuthButton from "@/components/AuthButton";
 import SignInModal from "@/components/SignInModal";
-import { NotificationProvider, useNotification } from "@/context/NotificationContext";
+import { NotificationProvider, useNotification } from "@/contexts/NotificationContext";
 import RedGuardIntro from "@/components/RedGuardIntro";
 import { useUser } from "@/contexts/UserContext";
+import { getApiUrl } from "@/utils/api";
 import { signIn } from "next-auth/react";
 
 // Composite type for ChatConsole
@@ -336,7 +337,7 @@ function HomeContent() {
         // Show preview as long as we have a config (uses placeholders for empty interaction)
 
         const fetchPreview = async () => {
-            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+            const apiUrl = getApiUrl();
             try {
                 const res = await fetch(`${apiUrl}/evaluate/preview`, {
                     method: 'POST',
@@ -445,7 +446,7 @@ function HomeContent() {
         setEvalResult(null);
         setEvalRawResponse(null);
         setEvaluateStage('Starting evaluation...');
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
 
         const processResult = async (result: any) => {
             setEvalResult(result);
@@ -616,7 +617,7 @@ function HomeContent() {
         }
         const userInput = interaction?.user || "{{user_input}}";
         const botResponse = interaction?.bot || "{{bot_response}}";
-        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:3001/api';
+        const apiUrl = getApiUrl();
         const res = await fetch(`${apiUrl}/evaluate/preview`, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
