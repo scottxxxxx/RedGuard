@@ -150,6 +150,16 @@ jobs:
             # CAUTION: This removes unnamed volumes. Ensure data is in named volumes or host mounts.
             sudo docker system prune -af --volumes
 
+            # Recreate the proxy-tier network (prune destroys it)
+            sudo docker network create proxy-tier || true
+
+            # Bring Bifrost (Nginx Proxy Manager) back up since prune killed it
+            cd ~/project-bifrost && sudo docker compose up -d
+            cd ~
+
             # Pull latest images and restart (using sudo)
             sudo docker compose -f docker-compose.prod.yml pull
             sudo docker compose -f docker-compose.prod.yml up -d
+
+            # Also restart the portfolio site since prune killed it
+            cd ~/ai-architect-portfolio && sudo docker compose up -d --build
