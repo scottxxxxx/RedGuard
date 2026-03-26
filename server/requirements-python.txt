@@ -1,0 +1,12 @@
+# Python dependencies for LLM security testing (garak)
+# Installed into server/venv, separate from the Node.js app
+#
+# SECURITY PIN: litellm is pinned to <1.82.7 due to a supply chain attack
+# on March 24, 2026. Versions 1.82.7 and 1.82.8 contained credential-stealing
+# malware (TeamPCP campaign) that exfiltrated SSH keys, .env files, and cloud
+# provider credentials. Both versions have been yanked from PyPI.
+# See: https://github.com/BerriAI/litellm/issues/24512
+# Do NOT upgrade litellm past 1.81.x until BerriAI publishes a verified clean release.
+#
+garak==0.14.0
+litellm>=1.81.0,<1.82.7  # Pinned: 1.82.7-1.82.8 were compromised (TeamPCP malware)

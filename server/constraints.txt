@@ -1,0 +1,4 @@
+# Pip constraints file — use with: pip install -c constraints.txt
+# Prevents accidental upgrade to compromised litellm versions.
+# See requirements-python.txt for full context.
+litellm>=1.81.0,<1.82.7
